@@ -10,7 +10,7 @@ This client requires a valid claude.ai account and authenticates through the off
 
 This software is provided "as is" for educational and personal productivity purposes. The authors make no warranties and assume no liability for its use.
 
-![Main Interface](screenshots/main.png)
+<img width="2226" height="1866" alt="Main Interface" src="https://github.com/user-attachments/assets/7c36f018-2659-4eff-805f-eedee1491c87" />
 
 ## Features
 
@@ -29,7 +29,7 @@ Press `Cmd+Shift+C` from anywhere to open a floating Spotlight-style search bar.
 - Maintains conversation context within a session
 - Auto-resizes based on response length
 
-![Spotlight](screenshots/spotlight.png)
+<img width="1990" height="758" alt="Spotlight" src="https://github.com/user-attachments/assets/540ddc9c-1eee-4801-a96a-78d28a7bc0f3" />
 
 ### Conversation Management
 - Create, rename, and delete conversations
@@ -78,13 +78,11 @@ Open Claude uses your existing claude.ai account. Click "Sign in with Claude" to
 ## Screenshots
 
 ### Login
-![Login](screenshots/login.png)
+<img width="2166" height="1512" alt="Login" src="https://github.com/user-attachments/assets/1281ad7a-e3f9-4b7f-ad06-90b005175ab1" />
 
 ### Conversation View
-![Conversation](screenshots/conversation.png)
+<img width="2020" height="1578" alt="Conversation" src="https://github.com/user-attachments/assets/153ee10b-b8a0-42f5-9e6f-8b138272a27f" />
 
-### Extended Thinking
-![Thinking](screenshots/thinking.png)
 
 ## Roadmap
 
