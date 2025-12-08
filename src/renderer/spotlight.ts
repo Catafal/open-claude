@@ -9,9 +9,15 @@ interface StepData {
   name?: string;
 }
 
+interface Message {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
 // DOM Elements
 const input = document.getElementById('spotlight-input') as HTMLInputElement;
 const sendBtn = document.getElementById('send-btn') as HTMLButtonElement;
+const newChatBtn = document.getElementById('new-chat-btn') as HTMLButtonElement;
 const inputRow = document.getElementById('input-row');
 const messagesArea = document.getElementById('messages-area');
 const container = document.getElementById('container');
@@ -25,6 +31,7 @@ let stepIndex = 0;
 let steps: StepData[] = [];
 let currentThinkingStep: HTMLElement | null = null;
 let currentToolStep: HTMLElement | null = null;
+let hasHistory = false;
 
 // Constants
 const chevronSvg = `<svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M14.128 7.16482C14.3126 6.95983 14.6298 6.94336 14.835 7.12771C15.0402 7.31242 15.0567 7.62952 14.8721 7.83477L10.372 12.835L10.2939 12.9053C10.2093 12.9667 10.1063 13 9.99995 13C9.85833 12.9999 9.72264 12.9402 9.62788 12.835L5.12778 7.83477L5.0682 7.75273C4.95072 7.55225 4.98544 7.28926 5.16489 7.12771C5.34445 6.96617 5.60969 6.95939 5.79674 7.09744L5.87193 7.16482L9.99995 11.7519L14.128 7.16482Z"/></svg>`;
@@ -53,6 +60,71 @@ function updateWindowSize() {
   const newHeight = Math.max(56, Math.min(containerHeight + 2, 700));
   claude.spotlightResize(newHeight);
   if (messagesArea) messagesArea.scrollTop = messagesArea.scrollHeight;
+}
+
+function showNewChatButton(show: boolean) {
+  if (newChatBtn) {
+    newChatBtn.classList.toggle('visible', show);
+  }
+}
+
+// Render existing messages from history
+function renderHistoryMessages(messages: Message[]) {
+  if (!messagesArea) return;
+
+  for (const msg of messages) {
+    const msgEl = document.createElement('div');
+
+    if (msg.role === 'user') {
+      msgEl.className = 'message';
+      msgEl.innerHTML = `<div class="user-message">${escapeHtml(msg.text)}</div>`;
+    } else if (msg.role === 'assistant') {
+      msgEl.className = 'message ai-message';
+      const responseEl = document.createElement('div');
+      responseEl.className = 'ai-response';
+      responseEl.innerHTML = parseMarkdown(msg.text);
+      msgEl.appendChild(responseEl);
+    }
+
+    messagesArea.appendChild(msgEl);
+  }
+
+  // Show messages area and update layout
+  inputRow?.classList.add('no-border');
+  messagesArea.classList.add('visible');
+  updateWindowSize();
+}
+
+// Load history on startup
+async function loadHistory() {
+  try {
+    const result = await claude.spotlightGetHistory();
+    if (result.hasHistory && result.messages.length > 0) {
+      hasHistory = true;
+      renderHistoryMessages(result.messages);
+      showNewChatButton(true);
+    }
+  } catch (e) {
+    console.error('Failed to load spotlight history:', e);
+  }
+}
+
+// Start new chat
+async function startNewChat() {
+  await claude.spotlightNewChat();
+
+  // Clear UI
+  if (messagesArea) {
+    messagesArea.innerHTML = '';
+    messagesArea.classList.remove('visible');
+  }
+  inputRow?.classList.remove('no-border');
+
+  hasHistory = false;
+  showNewChatButton(false);
+  updateWindowSize();
+
+  input.focus();
 }
 
 // Step functions
@@ -114,6 +186,10 @@ async function sendMessage() {
   sendBtn.disabled = true;
   inputRow?.classList.add('no-border');
   messagesArea?.classList.add('visible');
+
+  // Show new chat button since we now have history
+  hasHistory = true;
+  showNewChatButton(true);
 
   // Create user message
   const userMsgEl = document.createElement('div');
@@ -251,9 +327,14 @@ sendBtn.addEventListener('click', () => {
   }
 });
 
-// Focus input on load
+newChatBtn.addEventListener('click', () => {
+  startNewChat();
+});
+
+// Focus input on load and load history
 window.addEventListener('load', () => {
   input.focus();
+  loadHistory();
 });
 
 // Clean up on close

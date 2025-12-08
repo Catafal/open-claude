@@ -1,8 +1,15 @@
+// Settings schema
+export interface SettingsSchema {
+  spotlightKeybind: string;
+  spotlightPersistHistory: boolean;
+}
+
 // Store schema for electron-store
 export interface StoreSchema {
   orgId?: string;
   deviceId?: string;
   anonymousId?: string;
+  settings: SettingsSchema;
 }
 
 // Citation tracking (matches Claude's citation_start_delta/citation_end_delta)

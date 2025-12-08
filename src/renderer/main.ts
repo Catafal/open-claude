@@ -1425,6 +1425,11 @@ function setupEventListeners() {
   // New chat button
   $('new-chat-btn')?.addEventListener('click', newChat);
 
+  // Settings button
+  $('settings-btn')?.addEventListener('click', () => {
+    window.claude.openSettings();
+  });
+
   // Sidebar toggle
   $('sidebar-tab')?.addEventListener('click', toggleSidebar);
   $('sidebar-overlay')?.addEventListener('click', closeSidebar);

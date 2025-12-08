@@ -58,6 +58,29 @@
       color: rgba(0, 0, 0, 0.35);
     }
 
+    .new-chat-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      color: rgba(0, 0, 0, 0.4);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .new-chat-btn.visible {
+      display: flex;
+    }
+
+    .new-chat-btn:hover {
+      background: rgba(0, 0, 0, 0.08);
+      color: rgba(0, 0, 0, 0.6);
+    }
+
     .send-btn {
       width: 28px;
       height: 28px;
@@ -392,6 +415,15 @@
 
       .search-icon {
         filter: invert(1);
+      }
+
+      .new-chat-btn {
+        color: rgba(255, 255, 255, 0.4);
+      }
+
+      .new-chat-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.7);
       }
 
       .user-message {

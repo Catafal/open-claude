@@ -3,9 +3,48 @@ import path from 'path';
 import crypto from 'crypto';
 import { isAuthenticated, getOrgId, makeRequest, streamCompletion, stopResponse, generateTitle, store, BASE_URL } from './api/client';
 import { createStreamState, processSSEChunk, type StreamCallbacks } from './streaming/parser';
+import type { SettingsSchema } from './types';
 
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
+let settingsWindow: BrowserWindow | null = null;
+
+// Default settings
+const DEFAULT_SETTINGS: SettingsSchema = {
+  spotlightKeybind: 'CommandOrControl+Shift+C',
+  spotlightPersistHistory: true,
+};
+
+// Get settings with defaults
+function getSettings(): SettingsSchema {
+  const stored = store.get('settings');
+  return { ...DEFAULT_SETTINGS, ...stored };
+}
+
+// Save settings
+function saveSettings(settings: Partial<SettingsSchema>) {
+  const current = getSettings();
+  store.set('settings', { ...current, ...settings });
+}
+
+// Register spotlight shortcut
+function registerSpotlightShortcut() {
+  globalShortcut.unregisterAll();
+  const settings = getSettings();
+  const keybind = settings.spotlightKeybind || DEFAULT_SETTINGS.spotlightKeybind;
+
+  try {
+    globalShortcut.register(keybind, () => {
+      createSpotlightWindow();
+    });
+  } catch (e) {
+    // Fallback to default if custom keybind fails
+    console.error('Failed to register keybind:', keybind, e);
+    globalShortcut.register(DEFAULT_SETTINGS.spotlightKeybind, () => {
+      createSpotlightWindow();
+    });
+  }
+}
 
 // Create spotlight search window
 function createSpotlightWindow() {
@@ -75,6 +114,38 @@ function createMainWindow() {
   mainWindow.loadFile(path.join(__dirname, '../static/index.html'));
 }
 
+// Create settings window
+function createSettingsWindow() {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus();
+    return;
+  }
+
+  settingsWindow = new BrowserWindow({
+    width: 480,
+    height: 400,
+    minWidth: 400,
+    minHeight: 300,
+    transparent: true,
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 16 },
+  });
+
+  settingsWindow.loadFile(path.join(__dirname, '../static/settings.html'));
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+}
+
 // IPC handlers
 
 // Spotlight window resize
@@ -86,9 +157,10 @@ ipcMain.handle('spotlight-resize', async (_event, height: number) => {
   }
 });
 
-// Spotlight conversation state 
+// Spotlight conversation state
 let spotlightConversationId: string | null = null;
 let spotlightParentMessageUuid: string | null = null;
+let spotlightMessages: Array<{ role: 'user' | 'assistant'; text: string }> = [];
 
 // Spotlight send message (uses Haiku)
 ipcMain.handle('spotlight-send', async (_event, message: string) => {
@@ -113,6 +185,9 @@ ipcMain.handle('spotlight-send', async (_event, message: string) => {
 
   const conversationId = spotlightConversationId;
   const parentMessageUuid = spotlightParentMessageUuid || conversationId;
+
+  // Store user message
+  spotlightMessages.push({ role: 'user', text: message });
 
   const state = createStreamState();
 
@@ -139,6 +214,8 @@ ipcMain.handle('spotlight-send', async (_event, message: string) => {
       spotlightWindow?.webContents.send('spotlight-tool-result', { toolName, isError, result });
     },
     onComplete: (fullText, _steps, messageUuid) => {
+      // Store assistant response
+      spotlightMessages.push({ role: 'assistant', text: fullText });
       spotlightWindow?.webContents.send('spotlight-complete', { fullText, messageUuid });
     }
   };
@@ -156,8 +233,30 @@ ipcMain.handle('spotlight-send', async (_event, message: string) => {
 
 // Reset spotlight conversation when window is closed
 ipcMain.handle('spotlight-reset', async () => {
+  const settings = getSettings();
+  // Only reset if persist history is disabled
+  if (!settings.spotlightPersistHistory) {
+    spotlightConversationId = null;
+    spotlightParentMessageUuid = null;
+    spotlightMessages = [];
+  }
+});
+
+// Get spotlight conversation history from local state
+ipcMain.handle('spotlight-get-history', async () => {
+  const settings = getSettings();
+  if (!settings.spotlightPersistHistory || spotlightMessages.length === 0) {
+    return { hasHistory: false, messages: [] };
+  }
+
+  return { hasHistory: true, messages: spotlightMessages };
+});
+
+// Force new spotlight conversation
+ipcMain.handle('spotlight-new-chat', async () => {
   spotlightConversationId = null;
   spotlightParentMessageUuid = null;
+  spotlightMessages = [];
 });
 
 ipcMain.handle('get-auth-status', async () => {
@@ -433,6 +532,24 @@ ipcMain.handle('generate-title', async (_event, conversationId: string, messageC
   return result;
 });
 
+// Settings IPC handlers
+ipcMain.handle('open-settings', async () => {
+  createSettingsWindow();
+});
+
+ipcMain.handle('get-settings', async () => {
+  return getSettings();
+});
+
+ipcMain.handle('save-settings', async (_event, settings: Partial<SettingsSchema>) => {
+  saveSettings(settings);
+  // Re-register shortcut if keybind changed
+  if (settings.spotlightKeybind !== undefined) {
+    registerSpotlightShortcut();
+  }
+  return getSettings();
+});
+
 // Handle deep link on Windows (single instance)
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -449,10 +566,8 @@ if (!gotTheLock) {
 app.whenReady().then(() => {
   createMainWindow();
 
-  // Register global shortcut for spotlight (Cmd+Shift+C)
-  globalShortcut.register('CommandOrControl+Shift+C', () => {
-    createSpotlightWindow();
-  });
+  // Register spotlight shortcut from settings
+  registerSpotlightShortcut();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -101,9 +101,17 @@ contextBridge.exposeInMainWorld('claude', {
     ipcRenderer.removeAllListeners('spotlight-tool-result');
   },
   spotlightReset: () => ipcRenderer.invoke('spotlight-reset'),
+  spotlightGetHistory: () => ipcRenderer.invoke('spotlight-get-history'),
+  spotlightNewChat: () => ipcRenderer.invoke('spotlight-new-chat'),
 
   // Search modal toggle (triggered by global Command+K shortcut)
   onToggleSearchModal: (callback: () => void) => {
     ipcRenderer.on('toggle-search-modal', () => callback());
-  }
+  },
+
+  // Settings functions
+  openSettings: () => ipcRenderer.invoke('open-settings'),
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  saveSettings: (settings: { spotlightKeybind?: string; spotlightPersistHistory?: boolean }) =>
+    ipcRenderer.invoke('save-settings', settings),
 });
