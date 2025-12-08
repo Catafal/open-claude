@@ -168,10 +168,16 @@ ipcMain.handle('spotlight-send', async (_event, message: string) => {
   if (!orgId) throw new Error('Not authenticated');
 
   if (!spotlightConversationId) {
+    // Create spotlight conversation in incognito mode (is_temporary: true)
     const createResult = await makeRequest(
       `${BASE_URL}/api/organizations/${orgId}/chat_conversations`,
       'POST',
-      { name: '', model: 'claude-haiku-4-5-20251001' }
+      {
+        name: '',
+        model: 'claude-haiku-4-5-20251001',
+        is_temporary: true,
+        include_conversation_preferences: true
+      }
     );
 
     if (createResult.status !== 201 && createResult.status !== 200) {
@@ -259,6 +265,62 @@ ipcMain.handle('spotlight-new-chat', async () => {
   spotlightMessages = [];
 });
 
+// ============================================================================
+// TTS (Text-to-Speech) using Kokoro-82M
+// ============================================================================
+
+// Lazy-loaded Kokoro TTS instance (stays in memory after first use)
+let kokoroTTS: any = null;
+
+/**
+ * Get or initialize the Kokoro TTS model.
+ * Uses lazy loading to avoid slow startup - model loads on first TTS request.
+ * Includes retry logic for network failures during model download.
+ */
+async function getKokoroTTS(retries = 3): Promise<any> {
+  if (kokoroTTS) return kokoroTTS;
+
+  const { KokoroTTS } = await import('kokoro-js');
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[TTS] Loading Kokoro model (attempt ${attempt}/${retries})...`);
+      kokoroTTS = await KokoroTTS.from_pretrained(
+        'onnx-community/Kokoro-82M-v1.0-ONNX',
+        { dtype: 'q8', device: 'cpu' }
+      );
+      console.log('[TTS] Kokoro model loaded successfully');
+      return kokoroTTS;
+    } catch (err: any) {
+      console.error(`[TTS] Attempt ${attempt} failed:`, err.message || err);
+      if (attempt === retries) throw err;
+      // Wait before retrying (1s, 2s, 3s...)
+      await new Promise(r => setTimeout(r, attempt * 1000));
+    }
+  }
+  throw new Error('Failed to load Kokoro model after retries');
+}
+
+/**
+ * TTS IPC handler - converts text to speech using Kokoro.
+ * Returns audio samples for playback in the renderer process.
+ */
+ipcMain.handle('spotlight-speak', async (_event, text: string) => {
+  try {
+    const tts = await getKokoroTTS();
+    const audio = await tts.generate(text, { voice: 'af_heart' });
+
+    // Return audio data for Web Audio API playback in renderer
+    return {
+      samples: Array.from(audio.audio as Float32Array),
+      sampleRate: audio.sampling_rate || 24000
+    };
+  } catch (error) {
+    console.error('[TTS] Error generating speech:', error);
+    throw error;
+  }
+});
+
 ipcMain.handle('get-auth-status', async () => {
   return isAuthenticated();
 });
@@ -332,12 +394,14 @@ ipcMain.handle('create-conversation', async (_event, model?: string) => {
   console.log('[API] Creating conversation:', conversationId, 'with model:', model || 'claude-opus-4-5-20251101');
   console.log('[API] URL:', url);
 
+  // Create conversation in incognito mode (is_temporary: true)
+  // Incognito chats aren't saved, added to memory, or used to train models
   const result = await makeRequest(url, 'POST', {
     uuid: conversationId,
     name: '',
     model: model || 'claude-opus-4-5-20251101',
-    project_uuid: null,
-    create_mode: null
+    is_temporary: true,
+    include_conversation_preferences: true
   });
 
   console.log('[API] Create conversation response:', result.status, JSON.stringify(result.data));

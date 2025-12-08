@@ -15,14 +15,21 @@ interface Message {
 }
 
 // DOM Elements
-const input = document.getElementById('spotlight-input') as HTMLInputElement;
+const input = document.getElementById('spotlight-input') as HTMLTextAreaElement;
 const sendBtn = document.getElementById('send-btn') as HTMLButtonElement;
 const newChatBtn = document.getElementById('new-chat-btn') as HTMLButtonElement;
 const inputRow = document.getElementById('input-row');
 const messagesArea = document.getElementById('messages-area');
 const container = document.getElementById('container');
 
+// Mode toggle button element
+const modeToggle = document.getElementById('mode-toggle');
+const modeToggleLabel = document.getElementById('mode-toggle-label');
+
 // State
+type SpotlightMode = 'chat' | 'speak';
+let currentMode: SpotlightMode = 'chat';
+let isSpeaking = false;
 let isLoading = false;
 let currentMessageEl: HTMLElement | null = null;
 let currentStepsContainer: HTMLElement | null = null;
@@ -60,6 +67,20 @@ function updateWindowSize() {
   const newHeight = Math.max(56, Math.min(containerHeight + 2, 700));
   claude.spotlightResize(newHeight);
   if (messagesArea) messagesArea.scrollTop = messagesArea.scrollHeight;
+}
+
+/**
+ * Auto-resize textarea to fit content.
+ * Resets height to auto, then sets to scrollHeight for smooth expansion.
+ */
+function autoResizeInput() {
+  if (!input) return;
+  // Reset height to auto to get accurate scrollHeight
+  input.style.height = 'auto';
+  // Set height to scrollHeight (capped by max-height in CSS)
+  input.style.height = input.scrollHeight + 'px';
+  // Update window size to accommodate textarea growth
+  updateWindowSize();
 }
 
 function showNewChatButton(show: boolean) {
@@ -119,6 +140,9 @@ async function startNewChat() {
     messagesArea.classList.remove('visible');
   }
   inputRow?.classList.remove('no-border');
+
+  // Reset input height
+  input.style.height = 'auto';
 
   hasHistory = false;
   showNewChatButton(false);
@@ -220,8 +244,9 @@ async function sendMessage() {
 
   updateWindowSize();
 
-  // Clear input
+  // Clear input and reset height
   input.value = '';
+  input.style.height = 'auto';
   sendBtn.classList.remove('visible');
 
   try {
@@ -234,6 +259,99 @@ async function sendMessage() {
     sendBtn.disabled = false;
   }
 }
+
+// ============================================================================
+// TTS (Text-to-Speech) Mode
+// ============================================================================
+
+/**
+ * Play audio samples using Web Audio API.
+ * Creates an AudioContext, loads the samples into a buffer, and plays.
+ */
+function playAudio(samples: Float32Array, sampleRate: number): Promise<void> {
+  return new Promise((resolve) => {
+    const ctx = new AudioContext();
+    const buffer = ctx.createBuffer(1, samples.length, sampleRate);
+    buffer.getChannelData(0).set(samples);
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.onended = () => {
+      ctx.close();
+      resolve();
+    };
+    source.start();
+  });
+}
+
+/**
+ * Convert input text to speech using Kokoro TTS.
+ * Shows loading state on button, plays audio when ready.
+ */
+async function speakText(text: string) {
+  if (isSpeaking || !text) return;
+
+  isSpeaking = true;
+  sendBtn.disabled = true;
+  sendBtn.classList.add('loading');
+
+  try {
+    // Request TTS from main process (Kokoro)
+    const { samples, sampleRate } = await claude.spotlightSpeak(text);
+    // Play the audio
+    await playAudio(new Float32Array(samples), sampleRate);
+  } catch (err: any) {
+    console.error('[TTS] Failed to speak:', err);
+  } finally {
+    isSpeaking = false;
+    sendBtn.disabled = false;
+    sendBtn.classList.remove('loading');
+  }
+}
+
+/**
+ * Handle submit based on current mode.
+ * Chat mode: sends to Claude. Speak mode: converts to speech.
+ */
+async function handleSubmit() {
+  const text = input.value.trim();
+  if (!text) return;
+
+  if (currentMode === 'speak') {
+    await speakText(text);
+  } else {
+    await sendMessage();
+  }
+}
+
+// ============================================================================
+// Mode Toggle Logic
+// ============================================================================
+
+/**
+ * Toggle between Chat and TTS modes.
+ * Chat = sends to Claude, TTS = text-to-speech only (no AI).
+ */
+modeToggle?.addEventListener('click', () => {
+  // Toggle mode state
+  currentMode = currentMode === 'chat' ? 'speak' : 'chat';
+
+  // Update button appearance (active = TTS mode)
+  modeToggle.classList.toggle('active', currentMode === 'speak');
+
+  // Update label text
+  if (modeToggleLabel) {
+    modeToggleLabel.textContent = currentMode === 'chat' ? 'Chat' : 'TTS';
+  }
+
+  // Keep focus on input for quick typing
+  input.focus();
+});
+
+// ============================================================================
+// Stream Listeners (Chat mode)
+// ============================================================================
 
 // Set up stream listeners once at module level
 claude.onSpotlightStream((data: any) => {
@@ -304,26 +422,35 @@ claude.onSpotlightToolResult((data: any) => {
   }
 });
 
-// Event listeners
+// ============================================================================
+// Event Listeners
+// ============================================================================
+
+// Update button state and auto-resize input based on content
 input.addEventListener('input', () => {
   const hasText = input.value.trim().length > 0;
   sendBtn.classList.toggle('visible', hasText);
-  sendBtn.disabled = !hasText || isLoading;
+  // Disable if no text, or if loading (chat), or if speaking (TTS)
+  sendBtn.disabled = !hasText || isLoading || isSpeaking;
+  // Auto-resize textarea to fit content
+  autoResizeInput();
 });
 
+// Handle Enter key - uses handleSubmit which checks current mode
 input.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && input.value.trim() && !isLoading) {
+  if (e.key === 'Enter' && !e.shiftKey && input.value.trim() && !isLoading && !isSpeaking) {
     e.preventDefault();
-    sendMessage();
+    handleSubmit();
   }
   if (e.key === 'Escape') {
     window.close();
   }
 });
 
+// Handle send button click - uses handleSubmit which checks current mode
 sendBtn.addEventListener('click', () => {
-  if (input.value.trim() && !isLoading) {
-    sendMessage();
+  if (input.value.trim() && !isLoading && !isSpeaking) {
+    handleSubmit();
   }
 });
 

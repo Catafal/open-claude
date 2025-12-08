@@ -923,13 +923,18 @@
       color: #000;
       font-size: 14px;
       resize: none;
-      font-family: inherit;
+      font-family: Georgia, 'Times New Roman', serif;  /* Elegant serif for input */
+      font-style: italic;
       min-height: 20px;
       max-height: 120px;
       line-height: 1.4;
     }
 
-    .input-area textarea::placeholder { color: rgba(0, 0, 0, 0.4); }
+    .input-area textarea::placeholder {
+      font-family: Georgia, 'Times New Roman', serif;  /* Elegant serif for placeholder */
+      font-style: italic;
+      color: rgba(0, 0, 0, 0.4);
+    }
     .input-area textarea:focus { outline: none; }
 
     .send-btn {
@@ -1601,7 +1606,11 @@
       }
       .input-wrapper:focus-within { background: rgba(255, 255, 255, 0.12); }
       .input-area textarea { color: #fff; }
-      .input-area textarea::placeholder { color: rgba(255, 255, 255, 0.4); }
+      .input-area textarea::placeholder {
+        font-family: Georgia, 'Times New Roman', serif;  /* Elegant serif for placeholder */
+        font-style: italic;
+        color: rgba(255, 255, 255, 0.4);
+      }
 
       .empty-state { color: rgba(255, 255, 255, 0.5); }
       .empty-state p { color: rgba(255, 255, 255, 0.7); }

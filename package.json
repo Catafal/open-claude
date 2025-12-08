@@ -44,7 +44,15 @@
   "license": "ISC",
   "dependencies": {
     "electron-store": "^11.0.2",
+    "kokoro-js": "^1.2.1",
     "marked": "^17.0.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "onnxruntime-node",
+      "protobufjs",
+      "sharp"
+    ]
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

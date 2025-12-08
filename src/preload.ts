@@ -106,6 +106,10 @@ contextBridge.exposeInMainWorld('claude', {
   spotlightGetHistory: () => ipcRenderer.invoke('spotlight-get-history'),
   spotlightNewChat: () => ipcRenderer.invoke('spotlight-new-chat'),
 
+  // TTS (Text-to-Speech) - converts text to audio using Kokoro
+  spotlightSpeak: (text: string): Promise<{ samples: number[]; sampleRate: number }> =>
+    ipcRenderer.invoke('spotlight-speak', text),
+
   // Search modal toggle (triggered by global Command+K shortcut)
   onToggleSearchModal: (callback: () => void) => {
     ipcRenderer.on('toggle-search-modal', () => callback());

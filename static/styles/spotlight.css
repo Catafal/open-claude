@@ -23,14 +23,14 @@
 
     .input-row {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       padding: 12px 16px;
       gap: 12px;
       border-bottom: 1px solid rgba(0, 0, 0, 0.06);
       -webkit-app-region: drag;
     }
 
-    .input-row input,
+    .input-row textarea,
     .input-row button {
       -webkit-app-region: no-drag;
     }
@@ -43,6 +43,8 @@
       width: 20px;
       height: 20px;
       opacity: 0.4;
+      margin-top: 4px;
+      flex-shrink: 0;
     }
 
     #spotlight-input {
@@ -52,9 +54,37 @@
       font-size: 18px;
       outline: none;
       color: #1a1a1a;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-style: italic;
+      resize: none;
+      overflow-y: auto;
+      line-height: 1.4;
+      min-height: 26px;
+      max-height: 150px;
+      padding: 0;
+    }
+
+    /* Hide scrollbar but keep scrolling */
+    #spotlight-input::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    #spotlight-input::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    #spotlight-input::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 2px;
+    }
+
+    #spotlight-input::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 0, 0, 0.25);
     }
 
     #spotlight-input::placeholder {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-style: italic;
       color: rgba(0, 0, 0, 0.35);
     }
 
@@ -70,6 +100,7 @@
       align-items: center;
       justify-content: center;
       transition: all 0.15s;
+      flex-shrink: 0;
     }
 
     .new-chat-btn.visible {
@@ -94,6 +125,8 @@
       justify-content: center;
       opacity: 0;
       transition: opacity 0.15s;
+      position: relative;
+      flex-shrink: 0;
     }
 
     .send-btn.visible {
@@ -107,6 +140,64 @@
     .send-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    /* Loading state for send button during TTS - shows spinner */
+    .send-btn.loading,
+    .send-btn.loading:disabled {
+      opacity: 1;
+      pointer-events: none;
+      cursor: wait;
+    }
+
+    .send-btn.loading svg {
+      opacity: 0;
+    }
+
+    .send-btn.loading::after {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    /* Mode toggle button (Chat/TTS) - single click switches mode */
+    .mode-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: none;
+      background: rgba(0, 0, 0, 0.05);
+      color: rgba(0, 0, 0, 0.6);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-style: italic;
+      cursor: pointer;
+      transition: all 0.15s;
+      -webkit-app-region: no-drag;
+      min-width: 44px;
+      flex-shrink: 0;
+    }
+
+    .mode-toggle:hover {
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    /* Active state = TTS mode selected */
+    .mode-toggle.active {
+      background: #cc785c;
+      color: white;
+    }
+
+    .mode-toggle.active:hover {
+      background: #b56a4f;
     }
 
     .messages-area {
@@ -409,7 +500,17 @@
         color: #f0f0f0;
       }
 
+      #spotlight-input::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      #spotlight-input::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+
       #spotlight-input::placeholder {
+        font-family: Georgia, 'Times New Roman', serif;
+        font-style: italic;
         color: rgba(255, 255, 255, 0.35);
       }
 
@@ -477,5 +578,24 @@
       .step-spinner {
         border-color: rgba(255, 255, 255, 0.15);
         border-top-color: rgba(255, 255, 255, 0.5);
+      }
+
+      /* Mode toggle dark mode */
+      .mode-toggle {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .mode-toggle:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .mode-toggle.active {
+        background: #E8C4A0;
+        color: #1a1a1a;
+      }
+
+      .mode-toggle.active:hover {
+        background: #d4b090;
       }
     }
