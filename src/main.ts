@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, globalShortcut, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, session, globalShortcut, screen, Tray, Menu, nativeImage } from 'electron';
 import path from 'path';
 import crypto from 'crypto';
 import { isAuthenticated, getOrgId, makeRequest, streamCompletion, stopResponse, generateTitle, store, BASE_URL, prepareAttachmentPayload } from './api/client';
@@ -8,6 +8,7 @@ import type { SettingsSchema, AttachmentPayload, UploadFilePayload } from './typ
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
 
 // Default settings
 const DEFAULT_SETTINGS: SettingsSchema = {
@@ -144,6 +145,69 @@ function createSettingsWindow() {
   settingsWindow.on('closed', () => {
     settingsWindow = null;
   });
+}
+
+/**
+ * Creates the menu bar tray icon with context menu.
+ * macOS only: App runs in menu bar without dock icon.
+ */
+function createTray() {
+  try {
+    // Load pre-sized tray icon (22x22) for menu bar
+    const iconPath = path.join(__dirname, '../build/trayIcon.png');
+    const trayIcon = nativeImage.createFromPath(iconPath);
+    if (trayIcon.isEmpty()) return;
+
+    // Template image auto-adapts to light/dark menu bar
+    trayIcon.setTemplateImage(true);
+
+    tray = new Tray(trayIcon);
+    tray.setToolTip('Open Claude');
+
+    // Build context menu for tray
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Show Window',
+        click: () => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.show();
+            mainWindow.focus();
+          } else {
+            createMainWindow();
+          }
+        }
+      },
+      {
+        label: 'Spotlight',
+        accelerator: getSettings().spotlightKeybind,
+        click: () => createSpotlightWindow()
+      },
+      {
+        label: 'Settings',
+        click: () => createSettingsWindow()
+      },
+      { type: 'separator' },
+      {
+        label: 'Quit',
+        accelerator: 'CommandOrControl+Q',
+        click: () => app.quit()
+      }
+    ]);
+
+    tray.setContextMenu(contextMenu);
+
+    // Click on tray icon shows main window (macOS standard behavior)
+    tray.on('click', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      } else {
+        createMainWindow();
+      }
+    });
+  } catch (error) {
+    console.error('[Tray] Failed to create tray:', error);
+  }
 }
 
 // IPC handlers
@@ -646,7 +710,13 @@ if (!gotTheLock) {
 }
 
 app.whenReady().then(() => {
+  // Hide dock icon on macOS - app lives in menu bar only
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.hide();
+  }
+
   createMainWindow();
+  createTray();
 
   // Register spotlight shortcut from settings
   registerSpotlightShortcut();
@@ -664,7 +734,10 @@ app.on('will-quit', () => {
 });
 
 app.on('window-all-closed', () => {
+  // Menu bar app: Don't quit when windows closed on macOS, app stays in tray
+  // On other platforms, quit (standard behavior)
   if (process.platform !== 'darwin') {
     app.quit();
   }
+  // On macOS: do nothing - app remains in menu bar, user can reopen via tray
 });
