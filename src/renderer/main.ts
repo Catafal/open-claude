@@ -1587,6 +1587,11 @@ function setupEventListeners() {
   $('logout-btn')?.addEventListener('click', logout);
   $('chat-logout-btn')?.addEventListener('click', logout);
 
+  // Knowledge button - opens knowledge management window
+  $('knowledge-btn')?.addEventListener('click', () => {
+    (window as any).claude.openKnowledge();
+  });
+
   // New chat button
   $('new-chat-btn')?.addEventListener('click', newChat);
 

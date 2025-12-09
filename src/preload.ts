@@ -120,4 +120,16 @@ contextBridge.exposeInMainWorld('claude', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings: { spotlightKeybind?: string; spotlightPersistHistory?: boolean }) =>
     ipcRenderer.invoke('save-settings', settings),
+
+  // Knowledge Management functions
+  openKnowledge: () => ipcRenderer.invoke('open-knowledge'),
+  knowledgeGetSettings: () => ipcRenderer.invoke('knowledge-get-settings'),
+  knowledgeSaveSettings: (settings: { qdrantUrl?: string; qdrantApiKey?: string; collectionName?: string }) =>
+    ipcRenderer.invoke('knowledge-save-settings', settings),
+  knowledgeTestConnection: () => ipcRenderer.invoke('knowledge-test-connection'),
+  knowledgeIngestFile: (filePath: string) => ipcRenderer.invoke('knowledge-ingest-file', filePath),
+  knowledgeIngestUrl: (url: string) => ipcRenderer.invoke('knowledge-ingest-url', url),
+  knowledgeSearch: (query: string, limit?: number) => ipcRenderer.invoke('knowledge-search', query, limit || 5),
+  knowledgeList: () => ipcRenderer.invoke('knowledge-list'),
+  knowledgeDelete: (ids: string[]) => ipcRenderer.invoke('knowledge-delete', ids),
 });

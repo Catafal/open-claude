@@ -4,12 +4,20 @@ export interface SettingsSchema {
   spotlightPersistHistory: boolean;
 }
 
+// Knowledge settings (re-exported for StoreSchema compatibility)
+export interface KnowledgeSettingsStore {
+  qdrantUrl: string;
+  qdrantApiKey?: string;
+  collectionName: string;
+}
+
 // Store schema for electron-store
 export interface StoreSchema {
   orgId?: string;
   deviceId?: string;
   anonymousId?: string;
   settings: SettingsSchema;
+  knowledgeSettings?: KnowledgeSettingsStore;
 }
 
 // File attachment payloads

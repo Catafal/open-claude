@@ -3,12 +3,31 @@ import path from 'path';
 import crypto from 'crypto';
 import { isAuthenticated, getOrgId, makeRequest, streamCompletion, stopResponse, generateTitle, store, BASE_URL, prepareAttachmentPayload } from './api/client';
 import { createStreamState, processSSEChunk, type StreamCallbacks } from './streaming/parser';
-import type { SettingsSchema, AttachmentPayload, UploadFilePayload } from './types';
+import type { SettingsSchema, AttachmentPayload, UploadFilePayload, KnowledgeSettingsStore } from './types';
+import {
+  generateEmbedding,
+  initQdrantClient,
+  ensureCollection,
+  upsertVectors,
+  searchVectors,
+  deleteVectors,
+  listItems,
+  chunkText,
+  parseFile,
+  parseUrl,
+  DEFAULT_KNOWLEDGE_SETTINGS,
+  type KnowledgeSettings,
+  type KnowledgeItem
+} from './knowledge';
 
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
+let knowledgeWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+
+// Knowledge settings (loaded from store)
+let knowledgeSettings: KnowledgeSettings = { ...DEFAULT_KNOWLEDGE_SETTINGS };
 
 // Default settings
 const DEFAULT_SETTINGS: SettingsSchema = {
@@ -147,6 +166,38 @@ function createSettingsWindow() {
   });
 }
 
+// Create knowledge management window
+function createKnowledgeWindow() {
+  if (knowledgeWindow && !knowledgeWindow.isDestroyed()) {
+    knowledgeWindow.focus();
+    return;
+  }
+
+  knowledgeWindow = new BrowserWindow({
+    width: 700,
+    height: 600,
+    minWidth: 500,
+    minHeight: 450,
+    transparent: true,
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 16 },
+  });
+
+  knowledgeWindow.loadFile(path.join(__dirname, '../static/knowledge.html'));
+
+  knowledgeWindow.on('closed', () => {
+    knowledgeWindow = null;
+  });
+}
+
 /**
  * Creates the menu bar tray icon with context menu.
  * macOS only: App runs in menu bar without dock icon.
@@ -185,6 +236,10 @@ function createTray() {
       {
         label: 'Settings',
         click: () => createSettingsWindow()
+      },
+      {
+        label: 'Knowledge',
+        click: () => createKnowledgeWindow()
       },
       { type: 'separator' },
       {
@@ -694,6 +749,169 @@ ipcMain.handle('save-settings', async (_event, settings: Partial<SettingsSchema>
     registerSpotlightShortcut();
   }
   return getSettings();
+});
+
+// ============================================================================
+// Knowledge Management IPC Handlers
+// ============================================================================
+
+// Open knowledge window
+ipcMain.handle('open-knowledge', async () => {
+  createKnowledgeWindow();
+});
+
+// Get knowledge settings
+ipcMain.handle('knowledge-get-settings', async () => {
+  const stored = store.get('knowledgeSettings') as KnowledgeSettingsStore | undefined;
+  knowledgeSettings = { ...DEFAULT_KNOWLEDGE_SETTINGS, ...stored };
+  return knowledgeSettings;
+});
+
+// Save knowledge settings
+ipcMain.handle('knowledge-save-settings', async (_event, settings: Partial<KnowledgeSettings>) => {
+  knowledgeSettings = { ...knowledgeSettings, ...settings };
+  store.set('knowledgeSettings', knowledgeSettings);
+  // Reinitialize client with new settings
+  initQdrantClient(knowledgeSettings);
+  return knowledgeSettings;
+});
+
+// Test Qdrant connection
+ipcMain.handle('knowledge-test-connection', async () => {
+  try {
+    initQdrantClient(knowledgeSettings);
+    await ensureCollection(knowledgeSettings.collectionName);
+    return { success: true };
+  } catch (error: any) {
+    console.error('[Knowledge] Connection test failed:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// Ingest a file into knowledge base
+ipcMain.handle('knowledge-ingest-file', async (_event, filePath: string) => {
+  try {
+    console.log('[Knowledge] Ingesting file:', filePath);
+
+    // Parse file content
+    const doc = await parseFile(filePath);
+    const chunks = chunkText(doc.content);
+
+    console.log(`[Knowledge] File parsed: ${chunks.length} chunks`);
+
+    // Generate embeddings and create items
+    const items: KnowledgeItem[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const vector = await generateEmbedding(chunk.text);
+
+      items.push({
+        id: crypto.randomUUID(),
+        content: chunk.text,
+        metadata: {
+          source: doc.metadata.source!,
+          filename: doc.metadata.filename!,
+          type: doc.metadata.type!,
+          chunkIndex: i,
+          totalChunks: chunks.length,
+          dateAdded: new Date().toISOString()
+        },
+        vector
+      });
+    }
+
+    // Upsert to Qdrant
+    await ensureCollection(knowledgeSettings.collectionName);
+    await upsertVectors(knowledgeSettings.collectionName, items);
+
+    console.log(`[Knowledge] Ingested ${items.length} chunks from ${filePath}`);
+    return { success: true, chunksIngested: items.length };
+  } catch (error: any) {
+    console.error('[Knowledge] Ingest file error:', error.message);
+    return { success: false, chunksIngested: 0, error: error.message };
+  }
+});
+
+// Ingest a URL into knowledge base
+ipcMain.handle('knowledge-ingest-url', async (_event, url: string) => {
+  try {
+    console.log('[Knowledge] Ingesting URL:', url);
+
+    // Parse URL content
+    const doc = await parseUrl(url);
+    const chunks = chunkText(doc.content);
+
+    console.log(`[Knowledge] URL parsed: ${chunks.length} chunks`);
+
+    // Generate embeddings and create items
+    const items: KnowledgeItem[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const vector = await generateEmbedding(chunk.text);
+
+      items.push({
+        id: crypto.randomUUID(),
+        content: chunk.text,
+        metadata: {
+          source: doc.metadata.source!,
+          filename: doc.metadata.filename!,
+          type: doc.metadata.type!,
+          chunkIndex: i,
+          totalChunks: chunks.length,
+          dateAdded: new Date().toISOString()
+        },
+        vector
+      });
+    }
+
+    // Upsert to Qdrant
+    await ensureCollection(knowledgeSettings.collectionName);
+    await upsertVectors(knowledgeSettings.collectionName, items);
+
+    console.log(`[Knowledge] Ingested ${items.length} chunks from ${url}`);
+    return { success: true, chunksIngested: items.length };
+  } catch (error: any) {
+    console.error('[Knowledge] Ingest URL error:', error.message);
+    return { success: false, chunksIngested: 0, error: error.message };
+  }
+});
+
+// Search knowledge base
+ipcMain.handle('knowledge-search', async (_event, query: string, limit: number = 5) => {
+  try {
+    console.log('[Knowledge] Searching for:', query);
+
+    const queryVector = await generateEmbedding(query);
+    const results = await searchVectors(knowledgeSettings.collectionName, queryVector, limit);
+
+    console.log(`[Knowledge] Found ${results.length} results`);
+    return results;
+  } catch (error: any) {
+    console.error('[Knowledge] Search error:', error.message);
+    return [];
+  }
+});
+
+// List all knowledge items
+ipcMain.handle('knowledge-list', async () => {
+  try {
+    return await listItems(knowledgeSettings.collectionName);
+  } catch (error: any) {
+    console.error('[Knowledge] List error:', error.message);
+    return [];
+  }
+});
+
+// Delete knowledge items by ID
+ipcMain.handle('knowledge-delete', async (_event, ids: string[]) => {
+  try {
+    await deleteVectors(knowledgeSettings.collectionName, ids);
+    console.log(`[Knowledge] Deleted ${ids.length} items`);
+    return { success: true };
+  } catch (error: any) {
+    console.error('[Knowledge] Delete error:', error.message);
+    return { success: false, error: error.message };
+  }
 });
 
 // Handle deep link on Windows (single instance)

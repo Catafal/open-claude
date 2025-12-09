@@ -6,7 +6,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc && pnpm run build:renderer",
-    "build:renderer": "esbuild src/renderer/main.ts --bundle --outfile=static/js/main.js --format=esm --platform=browser && esbuild src/renderer/spotlight.ts --bundle --outfile=static/js/spotlight.js --format=esm --platform=browser && esbuild src/renderer/settings.ts --bundle --outfile=static/js/settings.js --format=esm --platform=browser",
+    "build:renderer": "esbuild src/renderer/main.ts --bundle --outfile=static/js/main.js --format=esm --platform=browser && esbuild src/renderer/spotlight.ts --bundle --outfile=static/js/spotlight.js --format=esm --platform=browser && esbuild src/renderer/settings.ts --bundle --outfile=static/js/settings.js --format=esm --platform=browser && esbuild src/renderer/knowledge.ts --bundle --outfile=static/js/knowledge.js --format=esm --platform=browser",
     "start": "pnpm run build && electron .",
     "dev": "pnpm run build && electron .",
     "pack": "pnpm run build && electron-builder --dir",
@@ -43,9 +43,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@qdrant/js-client-rest": "^1.11.0",
+    "@xenova/transformers": "^2.17.2",
+    "cheerio": "^1.0.0",
     "electron-store": "^11.0.2",
     "kokoro-js": "^1.2.1",
-    "marked": "^17.0.1"
+    "marked": "^17.0.1",
+    "pdf-parse": "^1.1.1"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -56,6 +60,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "@types/pdf-parse": "^1.1.5",
     "electron": "^39.2.6",
     "electron-builder": "^26.0.12",
     "esbuild": "^0.27.1",

@@ -182,16 +182,31 @@
       height: 34px;
       border-radius: 50%;
       cursor: pointer;
-      font-size: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 2px 6px rgba(204, 120, 92, 0.25);
-      transition: all 0.15s;
+      box-shadow: 0 2px 8px rgba(204, 120, 92, 0.35);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .home-send-btn:hover { transform: scale(1.03); }
-    .home-send-btn:active { transform: scale(0.97); }
+    .home-send-btn svg {
+      width: 16px;
+      height: 16px;
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .home-send-btn:hover {
+      transform: scale(1.08);
+      box-shadow: 0 4px 12px rgba(204, 120, 92, 0.45);
+    }
+
+    .home-send-btn:hover svg {
+      transform: translateY(-1px);
+    }
+
+    .home-send-btn:active {
+      transform: scale(0.95);
+    }
 
     .home-attach-btn {
       width: 34px;
@@ -253,8 +268,42 @@
       right: 0;
       padding: 16px;
       display: flex;
+      gap: 8px;
       justify-content: flex-end;
       -webkit-app-region: no-drag;
+    }
+
+    .home-footer-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(0, 0, 0, 0.45);
+      background: rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      cursor: pointer;
+      padding: 6px 12px 6px 10px;
+      border-radius: 20px;
+      transition: all 0.2s ease;
+    }
+
+    .home-footer-btn:hover {
+      background: rgba(204, 120, 92, 0.1);
+      border-color: rgba(204, 120, 92, 0.2);
+      color: #CC785C;
+    }
+
+    .home-footer-btn svg {
+      width: 14px;
+      height: 14px;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+
+    .home-footer-btn:hover svg {
+      opacity: 1;
     }
 
     .home-signout {
@@ -1113,16 +1162,29 @@
       height: 32px;
       border-radius: 50%;
       cursor: pointer;
-      font-size: 15px;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       flex-shrink: 0;
-      box-shadow: 0 2px 6px rgba(204, 120, 92, 0.3);
+      box-shadow: 0 2px 8px rgba(204, 120, 92, 0.35);
     }
 
-    .send-btn:hover:not(:disabled) { transform: scale(1.05); }
+    .send-btn svg {
+      width: 15px;
+      height: 15px;
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .send-btn:hover:not(:disabled) {
+      transform: scale(1.08);
+      box-shadow: 0 4px 12px rgba(204, 120, 92, 0.45);
+    }
+
+    .send-btn:hover:not(:disabled) svg {
+      transform: translateY(-1px);
+    }
+
     .send-btn:active:not(:disabled) { transform: scale(0.95); }
     .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -1696,6 +1758,16 @@
         color: rgba(255, 255, 255, 0.8);
       }
       .home-send-btn { box-shadow: 0 2px 8px rgba(204, 120, 92, 0.4); }
+      .home-footer-btn {
+        color: rgba(255, 255, 255, 0.5);
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+      .home-footer-btn:hover {
+        background: rgba(204, 120, 92, 0.15);
+        border-color: rgba(204, 120, 92, 0.25);
+        color: #E8C4A0;
+      }
       .home-signout {
         color: rgba(255, 255, 255, 0.4);
       }
@@ -1962,7 +2034,12 @@
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
               </svg>
             </button>
-            <button class="home-send-btn" id="home-send-btn">↑</button>
+            <button class="home-send-btn" id="home-send-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 19V5"/>
+                <path d="M5 12l7-7 7 7"/>
+              </svg>
+            </button>
           </div>
           <div class="attachment-container" id="home-attachment-container">
             <div class="attachment-list" id="home-attachment-list"></div>
@@ -1972,6 +2049,13 @@
       </div>
     </div>
     <div class="home-footer">
+      <button class="home-footer-btn" id="knowledge-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.5"/>
+          <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.5"/>
+        </svg>
+        Knowledge
+      </button>
       <button class="home-signout" id="logout-btn">Sign Out</button>
     </div>
   </div>
@@ -2006,7 +2090,12 @@
           </svg>
         </button>
         <textarea id="input" placeholder="Message Claude..." rows="1"></textarea>
-        <button class="send-btn" id="send-btn">↑</button>
+        <button class="send-btn" id="send-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 19V5"/>
+            <path d="M5 12l7-7 7 7"/>
+          </svg>
+        </button>
         <button class="stop-btn" id="stop-btn">■</button>
       </div>
       <div class="attachment-container" id="attachment-container">
