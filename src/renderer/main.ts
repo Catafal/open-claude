@@ -532,13 +532,22 @@ async function searchKnowledgeItems(query: string) {
 }
 
 function renderKnowledgeItems(items: (KnowledgeItem | KnowledgeSearchResult)[], showScores: boolean) {
-  const itemsList = $('items-list');
-  if (!itemsList) return;
+  const grid = $('knowledge-grid');
+  if (!grid) return;
 
+  // Get the drop zone element
+  const dropZoneHTML = `
+    <div id="drop-zone" class="knowledge-card drop-zone-card">
+      <span class="drop-icon">+</span>
+      <span class="drop-text">Drop files here</span>
+      <span class="drop-hint">.txt, .md, .pdf</span>
+    </div>
+  `;
+
+  // If no items, just show drop zone
   if (items.length === 0) {
-    itemsList.innerHTML = `<div class="empty-state">${
-      knowledgeIsSearchMode ? 'No results found' : 'No items yet. Add files or URLs above.'
-    }</div>`;
+    grid.innerHTML = dropZoneHTML;
+    setupDropZone();
     return;
   }
 
@@ -552,33 +561,49 @@ function renderKnowledgeItems(items: (KnowledgeItem | KnowledgeSearchResult)[], 
     bySource.get(source)!.push(item);
   }
 
-  // Render grouped items
-  itemsList.innerHTML = Array.from(bySource.entries())
+  // Type icons mapping
+  const typeIcons: Record<string, string> = {
+    txt: '📄',
+    md: '📝',
+    pdf: '📕',
+    url: '🔗'
+  };
+
+  // Build cards HTML
+  const cardsHTML = Array.from(bySource.entries())
     .map(([source, chunks]) => {
       const first = chunks[0];
+      const type = first.metadata?.type || 'txt';
+      const icon = typeIcons[type] || '📄';
+      const title = first.metadata?.filename || source.split('/').pop() || 'Unknown';
+      const preview = (first.content || '').slice(0, 100);
       const avgScore = showScores
         ? (chunks.reduce((sum, c) => sum + ((c as KnowledgeSearchResult).score || 0), 0) / chunks.length)
         : 0;
 
       return `
-        <div class="item-group" data-source="${escapeHtml(source)}">
-          <div class="item-info">
-            <div class="item-name">${escapeHtml(first.metadata?.filename || source)}</div>
-            <div class="item-meta">
-              <span class="item-type">${first.metadata?.type || 'file'}</span>
-              <span class="item-chunks">${chunks.length} chunk${chunks.length !== 1 ? 's' : ''}</span>
-              ${showScores ? `<span class="item-score">${(avgScore * 100).toFixed(1)}% match</span>` : ''}
-            </div>
+        <div class="knowledge-card" data-source="${escapeHtml(source)}">
+          <div class="card-icon">${icon}</div>
+          <div class="card-title">${escapeHtml(title)}</div>
+          <div class="card-preview">${escapeHtml(preview)}${preview.length >= 100 ? '...' : ''}</div>
+          <div class="card-meta">
+            <span class="card-chunks">${chunks.length} chunk${chunks.length !== 1 ? 's' : ''}</span>
+            ${showScores ? `<span class="card-score">${(avgScore * 100).toFixed(0)}%</span>` : ''}
           </div>
-          <button class="btn btn-danger delete-btn" data-source="${escapeHtml(source)}">Delete</button>
+          <button class="card-delete" data-source="${escapeHtml(source)}">×</button>
         </div>
       `;
     })
     .join('');
 
+  // Render drop zone + cards
+  grid.innerHTML = dropZoneHTML + cardsHTML;
+  setupDropZone();
+
   // Attach delete handlers
-  itemsList.querySelectorAll('.delete-btn').forEach(btn => {
+  grid.querySelectorAll('.card-delete').forEach(btn => {
     btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const source = (e.target as HTMLElement).dataset.source;
       if (!source) return;
 
@@ -594,8 +619,49 @@ function renderKnowledgeItems(items: (KnowledgeItem | KnowledgeSearchResult)[], 
   });
 }
 
+// Setup drop zone event handlers
+function setupDropZone() {
+  const dropZone = $('drop-zone');
+  const knowledgeFileInput = $('knowledge-file-input') as HTMLInputElement;
+
+  if (!dropZone) return;
+
+  // Remove old listeners by cloning
+  const newDropZone = dropZone.cloneNode(true) as HTMLElement;
+  dropZone.parentNode?.replaceChild(newDropZone, dropZone);
+
+  newDropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    newDropZone.classList.add('dragover');
+  });
+
+  newDropZone.addEventListener('dragleave', () => {
+    newDropZone.classList.remove('dragover');
+  });
+
+  newDropZone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    newDropZone.classList.remove('dragover');
+
+    const files = (e as DragEvent).dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    for (const file of Array.from(files)) {
+      const filePath = (file as any).path;
+      if (filePath) {
+        await ingestKnowledgeFile(filePath);
+      }
+    }
+  });
+
+  // Click to open file picker
+  newDropZone.addEventListener('click', () => {
+    knowledgeFileInput?.click();
+  });
+}
+
 function initKnowledgeUI() {
-  // Toggle connection section
+  // Toggle settings section
   const toggleConnectionBtn = $('toggle-connection');
   const connectionContent = $('connection-content');
   toggleConnectionBtn?.addEventListener('click', () => {
@@ -613,13 +679,8 @@ function initKnowledgeUI() {
   // Test connection button
   $('test-connection')?.addEventListener('click', testKnowledgeConnection);
 
-  // Add file button
+  // File input change handler
   const knowledgeFileInput = $('knowledge-file-input') as HTMLInputElement;
-  $('add-file')?.addEventListener('click', () => {
-    knowledgeFileInput?.click();
-  });
-
-  // File input change
   knowledgeFileInput?.addEventListener('change', async () => {
     const files = knowledgeFileInput.files;
     if (!files || files.length === 0) return;
@@ -633,58 +694,59 @@ function initKnowledgeUI() {
     knowledgeFileInput.value = '';
   });
 
-  // Add URL button
-  const urlInput = $('url-input') as HTMLInputElement;
-  const addUrlBtn = $('add-url');
-  addUrlBtn?.addEventListener('click', async () => {
-    const url = urlInput?.value.trim();
-    if (!url) return;
+  // Footer buttons - Settings toggle
+  const settingsBtn = $('toggle-connection');
+  const settingsPanel = $('settings-panel');
+  const addMenu = $('add-menu');
 
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      showKnowledgeIngestStatus('Invalid URL - must start with http:// or https://', 'error');
-      return;
+  settingsBtn?.addEventListener('click', () => {
+    settingsPanel?.classList.toggle('open');
+    // Close add menu if open
+    addMenu?.classList.remove('open');
+  });
+
+  // Footer buttons - Add button toggle
+  const addBtn = $('knowledge-add-btn');
+  addBtn?.addEventListener('click', () => {
+    addMenu?.classList.toggle('open');
+    // Close settings panel if open
+    settingsPanel?.classList.remove('open');
+  });
+
+  // Close menus when clicking outside
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    // Close add menu if clicking outside
+    if (addMenu?.classList.contains('open')) {
+      if (!target.closest('#knowledge-add-btn') && !target.closest('#add-menu')) {
+        addMenu.classList.remove('open');
+      }
     }
-
-    await ingestKnowledgeUrl(url);
-    if (urlInput) urlInput.value = '';
-  });
-
-  // URL input enter key
-  urlInput?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      addUrlBtn?.click();
-    }
-  });
-
-  // Drag and drop
-  const dropZone = $('drop-zone');
-  dropZone?.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.classList.add('dragover');
-  });
-
-  dropZone?.addEventListener('dragleave', () => {
-    dropZone.classList.remove('dragover');
-  });
-
-  dropZone?.addEventListener('drop', async (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('dragover');
-
-    const files = (e as DragEvent).dataTransfer?.files;
-    if (!files || files.length === 0) return;
-
-    for (const file of Array.from(files)) {
-      const filePath = (file as any).path;
-      if (filePath) {
-        await ingestKnowledgeFile(filePath);
+    // Close settings panel if clicking outside
+    if (settingsPanel?.classList.contains('open')) {
+      if (!target.closest('#toggle-connection') && !target.closest('#settings-panel')) {
+        settingsPanel.classList.remove('open');
       }
     }
   });
 
-  // Click on drop zone triggers file picker
-  dropZone?.addEventListener('click', () => {
+  // Add Menu: Add Files
+  $('add-menu-file')?.addEventListener('click', () => {
     knowledgeFileInput?.click();
+    addMenu?.classList.remove('open');
+  });
+
+  // Add Menu: Add URL
+  $('add-menu-url')?.addEventListener('click', () => {
+    const url = prompt('Enter URL to add:');
+    if (url) {
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        showKnowledgeIngestStatus('Invalid URL - must start with http:// or https://', 'error');
+      } else {
+        ingestKnowledgeUrl(url);
+      }
+    }
+    addMenu?.classList.remove('open');
   });
 
   // Search input with debounce
