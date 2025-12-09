@@ -342,6 +342,62 @@ body {
   font-weight: 500;
 }
 
+/* Collapsible Connection Section */
+.connection-section {
+  padding: 0;
+}
+
+.connection-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 16px 20px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(0, 0, 0, 0.5);
+  transition: all 0.15s;
+}
+
+.connection-toggle:hover {
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.toggle-icon {
+  font-size: 14px;
+}
+
+.toggle-arrow {
+  margin-left: auto;
+  font-size: 16px;
+  transition: transform 0.2s ease;
+}
+
+.connection-toggle.expanded .toggle-arrow {
+  transform: rotate(90deg);
+}
+
+.connection-content {
+  padding: 0 20px 20px 20px;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.2s ease, padding 0.3s ease;
+  max-height: 500px;
+  opacity: 1;
+}
+
+.connection-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 /* Dark mode */
 @media (prefers-color-scheme: dark) {
   body {
@@ -445,5 +501,13 @@ body {
 
   .items-list::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
+  }
+
+  .connection-toggle {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .connection-toggle:hover {
+    color: rgba(255, 255, 255, 0.7);
   }
 }

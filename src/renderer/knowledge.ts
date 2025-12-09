@@ -40,6 +40,8 @@ const dropZone = document.getElementById('drop-zone') as HTMLElement;
 const ingestStatus = document.getElementById('ingest-status') as HTMLElement;
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
 const itemsList = document.getElementById('items-list') as HTMLElement;
+const toggleConnectionBtn = document.getElementById('toggle-connection') as HTMLButtonElement;
+const connectionContent = document.getElementById('connection-content') as HTMLElement;
 
 // State
 let isSearchMode = false;
@@ -215,6 +217,18 @@ function escapeHtml(str: string): string {
 }
 
 // Event Listeners
+
+// Toggle connection section
+toggleConnectionBtn.addEventListener('click', () => {
+  const isExpanded = !connectionContent.classList.contains('collapsed');
+  if (isExpanded) {
+    connectionContent.classList.add('collapsed');
+    toggleConnectionBtn.classList.remove('expanded');
+  } else {
+    connectionContent.classList.remove('collapsed');
+    toggleConnectionBtn.classList.add('expanded');
+  }
+});
 
 // Test connection button
 testBtn.addEventListener('click', testConnection);
