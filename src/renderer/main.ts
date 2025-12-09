@@ -159,6 +159,26 @@ interface StreamingBlock {
   isError?: boolean;
 }
 
+// Knowledge types
+interface KnowledgeMetadata {
+  source: string;
+  filename: string;
+  type: 'txt' | 'md' | 'pdf' | 'url';
+  chunkIndex: number;
+  totalChunks: number;
+  dateAdded: string;
+}
+
+interface KnowledgeItem {
+  id: string;
+  content: string;
+  metadata: KnowledgeMetadata;
+}
+
+interface KnowledgeSearchResult extends KnowledgeItem {
+  score: number;
+}
+
 
 let conversationId: string | null = null;
 let parentMessageUuid: string | null = null;
@@ -171,6 +191,11 @@ let openDropdownId: string | null = null;
 let pendingAttachments: UploadedAttachment[] = [];
 let uploadingAttachments = false;
 let attachmentError = '';
+
+// Knowledge state
+let knowledgeIsSearchMode = false;
+let knowledgeSearchTimeout: number;
+let knowledgeInitialized = false;
 
 const modelDisplayNames: Record<string, string> = {
   'claude-opus-4-5-20251101': 'Opus 4.5',
@@ -352,12 +377,14 @@ function showHome() {
   const login = $('login');
   const home = $('home');
   const chat = $('chat');
+  const knowledge = $('knowledge');
   const sidebarTab = $('sidebar-tab');
   const homeInput = $('home-input') as HTMLTextAreaElement;
 
   if (login) login.style.display = 'none';
   if (home) home.classList.add('active');
   if (chat) chat.classList.remove('active');
+  if (knowledge) knowledge.classList.remove('active');
   if (sidebarTab) sidebarTab.classList.remove('hidden');
   if (homeInput) setTimeout(() => homeInput.focus(), 100);
 }
@@ -366,14 +393,311 @@ function showChat() {
   const login = $('login');
   const home = $('home');
   const chat = $('chat');
+  const knowledge = $('knowledge');
   const sidebarTab = $('sidebar-tab');
   const modelBadge = document.querySelector('.model-badge');
 
   if (login) login.style.display = 'none';
   if (home) home.classList.remove('active');
   if (chat) chat.classList.add('active');
+  if (knowledge) knowledge.classList.remove('active');
   if (sidebarTab) sidebarTab.classList.remove('hidden');
   if (modelBadge) modelBadge.textContent = modelDisplayNames[selectedModel] || 'Opus 4.5';
+}
+
+function showKnowledge() {
+  const login = $('login');
+  const home = $('home');
+  const chat = $('chat');
+  const knowledge = $('knowledge');
+  const sidebarTab = $('sidebar-tab');
+
+  if (login) login.style.display = 'none';
+  if (home) home.classList.remove('active');
+  if (chat) chat.classList.remove('active');
+  if (knowledge) knowledge.classList.add('active');
+  if (sidebarTab) sidebarTab.classList.add('hidden');
+  closeSidebar();
+
+  // Load knowledge items when showing and initialize if first time
+  if (!knowledgeInitialized) {
+    initKnowledgeUI();
+    knowledgeInitialized = true;
+  }
+  loadKnowledgeItems();
+}
+
+// Knowledge UI functions
+async function loadKnowledgeSettings() {
+  const qdrantUrl = $('qdrant-url') as HTMLInputElement;
+  const qdrantKey = $('qdrant-key') as HTMLInputElement;
+  if (!qdrantUrl || !qdrantKey) return;
+
+  const settings = await window.claude.knowledgeGetSettings();
+  qdrantUrl.value = settings.qdrantUrl || 'http://localhost:6333';
+  qdrantKey.value = settings.qdrantApiKey || '';
+}
+
+async function saveKnowledgeSettings() {
+  const qdrantUrl = $('qdrant-url') as HTMLInputElement;
+  const qdrantKey = $('qdrant-key') as HTMLInputElement;
+  if (!qdrantUrl || !qdrantKey) return;
+
+  await window.claude.knowledgeSaveSettings({
+    qdrantUrl: qdrantUrl.value.trim(),
+    qdrantApiKey: qdrantKey.value.trim() || undefined
+  });
+}
+
+async function testKnowledgeConnection() {
+  const testBtn = $('test-connection') as HTMLButtonElement;
+  const connectionStatus = $('connection-status') as HTMLElement;
+  if (!testBtn || !connectionStatus) return;
+
+  testBtn.disabled = true;
+  connectionStatus.textContent = 'Testing...';
+  connectionStatus.className = 'status-text';
+
+  await saveKnowledgeSettings();
+  const result = await window.claude.knowledgeTestConnection();
+
+  if (result.success) {
+    connectionStatus.textContent = 'Connected!';
+    connectionStatus.className = 'status-text success';
+  } else {
+    connectionStatus.textContent = `Error: ${result.error}`;
+    connectionStatus.className = 'status-text error';
+  }
+
+  testBtn.disabled = false;
+}
+
+function showKnowledgeIngestStatus(message: string, type: 'loading' | 'success' | 'error') {
+  const ingestStatus = $('ingest-status');
+  if (!ingestStatus) return;
+  ingestStatus.textContent = message;
+  ingestStatus.className = `ingest-status ${type}`;
+}
+
+function clearKnowledgeIngestStatus(delay = 3000) {
+  setTimeout(() => {
+    const ingestStatus = $('ingest-status');
+    if (!ingestStatus) return;
+    ingestStatus.textContent = '';
+    ingestStatus.className = 'ingest-status';
+  }, delay);
+}
+
+async function ingestKnowledgeFile(filePath: string) {
+  showKnowledgeIngestStatus('Ingesting file...', 'loading');
+  const result = await window.claude.knowledgeIngestFile(filePath);
+
+  if (result.success) {
+    showKnowledgeIngestStatus(`Added ${result.chunksIngested} chunks`, 'success');
+    clearKnowledgeIngestStatus();
+    await loadKnowledgeItems();
+  } else {
+    showKnowledgeIngestStatus(`Error: ${result.error}`, 'error');
+  }
+}
+
+async function ingestKnowledgeUrl(url: string) {
+  showKnowledgeIngestStatus('Fetching URL...', 'loading');
+  const result = await window.claude.knowledgeIngestUrl(url);
+
+  if (result.success) {
+    showKnowledgeIngestStatus(`Added ${result.chunksIngested} chunks`, 'success');
+    clearKnowledgeIngestStatus();
+    await loadKnowledgeItems();
+  } else {
+    showKnowledgeIngestStatus(`Error: ${result.error}`, 'error');
+  }
+}
+
+async function loadKnowledgeItems() {
+  const items: KnowledgeItem[] = await window.claude.knowledgeList();
+  renderKnowledgeItems(items, false);
+}
+
+async function searchKnowledgeItems(query: string) {
+  if (!query.trim()) {
+    knowledgeIsSearchMode = false;
+    await loadKnowledgeItems();
+    return;
+  }
+
+  knowledgeIsSearchMode = true;
+  const results: KnowledgeSearchResult[] = await window.claude.knowledgeSearch(query, 20);
+  renderKnowledgeItems(results, true);
+}
+
+function renderKnowledgeItems(items: (KnowledgeItem | KnowledgeSearchResult)[], showScores: boolean) {
+  const itemsList = $('items-list');
+  if (!itemsList) return;
+
+  if (items.length === 0) {
+    itemsList.innerHTML = `<div class="empty-state">${
+      knowledgeIsSearchMode ? 'No results found' : 'No items yet. Add files or URLs above.'
+    }</div>`;
+    return;
+  }
+
+  // Group items by source
+  const bySource = new Map<string, (KnowledgeItem | KnowledgeSearchResult)[]>();
+  for (const item of items) {
+    const source = item.metadata?.source || 'Unknown';
+    if (!bySource.has(source)) {
+      bySource.set(source, []);
+    }
+    bySource.get(source)!.push(item);
+  }
+
+  // Render grouped items
+  itemsList.innerHTML = Array.from(bySource.entries())
+    .map(([source, chunks]) => {
+      const first = chunks[0];
+      const avgScore = showScores
+        ? (chunks.reduce((sum, c) => sum + ((c as KnowledgeSearchResult).score || 0), 0) / chunks.length)
+        : 0;
+
+      return `
+        <div class="item-group" data-source="${escapeHtml(source)}">
+          <div class="item-info">
+            <div class="item-name">${escapeHtml(first.metadata?.filename || source)}</div>
+            <div class="item-meta">
+              <span class="item-type">${first.metadata?.type || 'file'}</span>
+              <span class="item-chunks">${chunks.length} chunk${chunks.length !== 1 ? 's' : ''}</span>
+              ${showScores ? `<span class="item-score">${(avgScore * 100).toFixed(1)}% match</span>` : ''}
+            </div>
+          </div>
+          <button class="btn btn-danger delete-btn" data-source="${escapeHtml(source)}">Delete</button>
+        </div>
+      `;
+    })
+    .join('');
+
+  // Attach delete handlers
+  itemsList.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const source = (e.target as HTMLElement).dataset.source;
+      if (!source) return;
+
+      const idsToDelete = items
+        .filter(item => item.metadata?.source === source)
+        .map(item => item.id);
+
+      if (idsToDelete.length > 0) {
+        await window.claude.knowledgeDelete(idsToDelete);
+        await loadKnowledgeItems();
+      }
+    });
+  });
+}
+
+function initKnowledgeUI() {
+  // Toggle connection section
+  const toggleConnectionBtn = $('toggle-connection');
+  const connectionContent = $('connection-content');
+  toggleConnectionBtn?.addEventListener('click', () => {
+    if (!connectionContent) return;
+    const isExpanded = !connectionContent.classList.contains('collapsed');
+    if (isExpanded) {
+      connectionContent.classList.add('collapsed');
+      toggleConnectionBtn.classList.remove('expanded');
+    } else {
+      connectionContent.classList.remove('collapsed');
+      toggleConnectionBtn.classList.add('expanded');
+    }
+  });
+
+  // Test connection button
+  $('test-connection')?.addEventListener('click', testKnowledgeConnection);
+
+  // Add file button
+  const knowledgeFileInput = $('knowledge-file-input') as HTMLInputElement;
+  $('add-file')?.addEventListener('click', () => {
+    knowledgeFileInput?.click();
+  });
+
+  // File input change
+  knowledgeFileInput?.addEventListener('change', async () => {
+    const files = knowledgeFileInput.files;
+    if (!files || files.length === 0) return;
+
+    for (const file of Array.from(files)) {
+      const filePath = (file as any).path;
+      if (filePath) {
+        await ingestKnowledgeFile(filePath);
+      }
+    }
+    knowledgeFileInput.value = '';
+  });
+
+  // Add URL button
+  const urlInput = $('url-input') as HTMLInputElement;
+  const addUrlBtn = $('add-url');
+  addUrlBtn?.addEventListener('click', async () => {
+    const url = urlInput?.value.trim();
+    if (!url) return;
+
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      showKnowledgeIngestStatus('Invalid URL - must start with http:// or https://', 'error');
+      return;
+    }
+
+    await ingestKnowledgeUrl(url);
+    if (urlInput) urlInput.value = '';
+  });
+
+  // URL input enter key
+  urlInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      addUrlBtn?.click();
+    }
+  });
+
+  // Drag and drop
+  const dropZone = $('drop-zone');
+  dropZone?.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+
+  dropZone?.addEventListener('dragleave', () => {
+    dropZone.classList.remove('dragover');
+  });
+
+  dropZone?.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+
+    const files = (e as DragEvent).dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    for (const file of Array.from(files)) {
+      const filePath = (file as any).path;
+      if (filePath) {
+        await ingestKnowledgeFile(filePath);
+      }
+    }
+  });
+
+  // Click on drop zone triggers file picker
+  dropZone?.addEventListener('click', () => {
+    knowledgeFileInput?.click();
+  });
+
+  // Search input with debounce
+  const searchInput = $('search-input') as HTMLInputElement;
+  searchInput?.addEventListener('input', () => {
+    clearTimeout(knowledgeSearchTimeout);
+    knowledgeSearchTimeout = window.setTimeout(async () => {
+      await searchKnowledgeItems(searchInput.value);
+    }, 300);
+  });
+
+  // Load initial settings
+  loadKnowledgeSettings();
 }
 
 // Sidebar functions
@@ -1587,9 +1911,14 @@ function setupEventListeners() {
   $('logout-btn')?.addEventListener('click', logout);
   $('chat-logout-btn')?.addEventListener('click', logout);
 
-  // Knowledge button - opens knowledge management window
+  // Knowledge button - shows knowledge view inline
   $('knowledge-btn')?.addEventListener('click', () => {
-    (window as any).claude.openKnowledge();
+    showKnowledge();
+  });
+
+  // Knowledge back button - returns to home
+  $('knowledge-back-btn')?.addEventListener('click', () => {
+    showHome();
   });
 
   // New chat button

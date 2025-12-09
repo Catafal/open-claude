@@ -15,11 +15,13 @@ body {
 
 .knowledge-container {
   height: 100vh;
-  display: flex;
   flex-direction: column;
 }
 
 .knowledge-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 20px 24px;
   padding-top: 52px; /* Account for window controls */
   background: transparent;
