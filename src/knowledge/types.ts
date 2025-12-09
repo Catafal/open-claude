@@ -5,6 +5,8 @@
  * Uses Qdrant for vector storage and transformers.js for embeddings.
  */
 
+import type { TrackedNotionPage } from '../types';
+
 // Settings for Qdrant connection (stored in electron-store)
 export interface KnowledgeSettings {
   qdrantUrl: string;        // Default: "http://localhost:6333"
@@ -18,11 +20,24 @@ export const DEFAULT_KNOWLEDGE_SETTINGS: KnowledgeSettings = {
   collectionName: 'open-claude-knowledge'
 };
 
+// Settings for Notion connection (stored in electron-store)
+export interface NotionSettings {
+  notionToken?: string;       // Integration token from notion.so/my-integrations
+  lastSync?: string;          // ISO timestamp of last sync
+  syncOnStart: boolean;       // Auto-sync on app start
+  trackedPages?: TrackedNotionPage[]; // Manually imported pages for update tracking
+}
+
+// Default Notion settings
+export const DEFAULT_NOTION_SETTINGS: NotionSettings = {
+  syncOnStart: true
+};
+
 // Metadata for each knowledge item
 export interface KnowledgeMetadata {
   source: string;           // File path or URL
   filename: string;         // Display name
-  type: 'txt' | 'md' | 'pdf' | 'url';
+  type: 'txt' | 'md' | 'pdf' | 'url' | 'notion';
   chunkIndex: number;       // Position in chunked document
   totalChunks: number;      // Total chunks from source
   dateAdded: string;        // ISO timestamp

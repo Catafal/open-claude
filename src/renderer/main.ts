@@ -26,6 +26,36 @@ declare global {
       onMessageToolResult: (callback: (data: ToolResultData) => void) => void;
       onMessageStream: (callback: (data: StreamData) => void) => void;
       onMessageComplete: (callback: (data: CompleteData) => void) => void;
+      // Knowledge functions
+      openKnowledge: () => Promise<void>;
+      knowledgeOpenFileDialog: () => Promise<string[]>;
+      knowledgeGetSettings: () => Promise<{ qdrantUrl?: string; qdrantApiKey?: string }>;
+      knowledgeSaveSettings: (settings: { qdrantUrl?: string; qdrantApiKey?: string }) => Promise<void>;
+      knowledgeTestConnection: () => Promise<{ success: boolean; error?: string }>;
+      knowledgeIngestFile: (filePath: string) => Promise<{ success: boolean; chunksIngested?: number; error?: string }>;
+      knowledgeIngestUrl: (url: string) => Promise<{ success: boolean; chunksIngested?: number; error?: string }>;
+      knowledgeSearch: (query: string, limit?: number) => Promise<KnowledgeSearchResult[]>;
+      knowledgeList: () => Promise<KnowledgeItem[]>;
+      knowledgeDelete: (ids: string[]) => Promise<void>;
+      // Notion functions
+      notionGetSettings: () => Promise<{ notionToken?: string; lastSync?: string; syncOnStart?: boolean }>;
+      notionSaveSettings: (settings: { notionToken?: string; syncOnStart?: boolean }) => Promise<void>;
+      notionTestConnection: () => Promise<{ success: boolean; error?: string }>;
+      notionSync: () => Promise<{ success: boolean; pagesCount?: number; chunksCount?: number; lastSync?: string; error?: string }>;
+      // Manual Notion Import functions
+      notionImportPage: (urlOrId: string, includeSubpages: boolean) => Promise<{ success: boolean; pagesCount?: number; chunksCount?: number; pages?: unknown[]; error?: string }>;
+      notionGetTrackedPages: () => Promise<unknown[]>;
+      notionRemoveTrackedPage: (pageId: string) => Promise<{ success: boolean; title?: string; error?: string }>;
+      notionCheckUpdates: () => Promise<{ success: boolean; updates: Array<{ id: string; title: string; lastEditedTime: string }>; error?: string }>;
+      notionSyncTrackedPage: (pageId: string) => Promise<{ success: boolean; chunksCount?: number; page?: unknown; error?: string }>;
+      // RAG Agent functions
+      ragGetSettings: () => Promise<{ enabled: boolean; ollamaUrl: string; model: string; maxQueries: number; maxContextChunks: number; minRelevanceScore: number }>;
+      ragSaveSettings: (settings: { enabled?: boolean; ollamaUrl?: string; model?: string }) => Promise<void>;
+      ragTestConnection: () => Promise<{ success: boolean; models?: string[]; error?: string }>;
+      onRagStatus?: (callback: (data: { conversationId: string; status: string; message: string; detail?: { queriesGenerated?: number; chunksRetrieved?: number; processingTimeMs?: number } }) => void) => void;
+      // View switching
+      onShowKnowledgeView?: (callback: () => void) => void;
+      onShowSettingsView?: (callback: () => void) => void;
     };
   }
 }
@@ -145,6 +175,7 @@ interface Step {
   isActive?: boolean;
   index?: number;
   citations?: Citation[];
+  ragMessage?: string; // RAG step message
 }
 
 interface StreamingBlock {
@@ -207,7 +238,8 @@ const streamingBlocks = {
   thinkingBlocks: new Map<number, StreamingBlock>(),
   toolBlocks: new Map<number, StreamingBlock>(),
   textBlocks: new Map<number, StreamingBlock>(),
-  textContent: ''
+  textContent: '',
+  ragBlock: null as { status: string; message: string; detail?: { queriesGenerated?: number; chunksRetrieved?: number } } | null
 };
 
 function resetStreamingBlocks() {
@@ -215,6 +247,7 @@ function resetStreamingBlocks() {
   streamingBlocks.toolBlocks.clear();
   streamingBlocks.textBlocks.clear();
   streamingBlocks.textContent = '';
+  streamingBlocks.ragBlock = null;
 }
 
 const $ = (id: string) => document.getElementById(id);
@@ -378,6 +411,7 @@ function showHome() {
   const home = $('home');
   const chat = $('chat');
   const knowledge = $('knowledge');
+  const settings = $('settings');
   const sidebarTab = $('sidebar-tab');
   const homeInput = $('home-input') as HTMLTextAreaElement;
 
@@ -385,6 +419,7 @@ function showHome() {
   if (home) home.classList.add('active');
   if (chat) chat.classList.remove('active');
   if (knowledge) knowledge.classList.remove('active');
+  if (settings) settings.classList.remove('active');
   if (sidebarTab) sidebarTab.classList.remove('hidden');
   if (homeInput) setTimeout(() => homeInput.focus(), 100);
 }
@@ -394,6 +429,7 @@ function showChat() {
   const home = $('home');
   const chat = $('chat');
   const knowledge = $('knowledge');
+  const settings = $('settings');
   const sidebarTab = $('sidebar-tab');
   const modelBadge = document.querySelector('.model-badge');
 
@@ -401,6 +437,7 @@ function showChat() {
   if (home) home.classList.remove('active');
   if (chat) chat.classList.add('active');
   if (knowledge) knowledge.classList.remove('active');
+  if (settings) settings.classList.remove('active');
   if (sidebarTab) sidebarTab.classList.remove('hidden');
   if (modelBadge) modelBadge.textContent = modelDisplayNames[selectedModel] || 'Opus 4.5';
 }
@@ -410,12 +447,14 @@ function showKnowledge() {
   const home = $('home');
   const chat = $('chat');
   const knowledge = $('knowledge');
+  const settings = $('settings');
   const sidebarTab = $('sidebar-tab');
 
   if (login) login.style.display = 'none';
   if (home) home.classList.remove('active');
   if (chat) chat.classList.remove('active');
   if (knowledge) knowledge.classList.add('active');
+  if (settings) settings.classList.remove('active');
   if (sidebarTab) sidebarTab.classList.add('hidden');
   closeSidebar();
 
@@ -425,6 +464,169 @@ function showKnowledge() {
     knowledgeInitialized = true;
   }
   loadKnowledgeItems();
+}
+
+// Settings view state
+let settingsInitialized = false;
+let isRecordingKeybind = false;
+let currentAppSettings: { spotlightKeybind: string; spotlightPersistHistory: boolean; spotlightSystemPrompt: string } | null = null;
+let pendingKeybind: string | null = null;
+
+// Detect if we're on macOS
+const isMacPlatform = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
+// Format keybind for display
+function formatKeybind(keybind: string): string {
+  return keybind
+    .replace('CommandOrControl', isMacPlatform ? '\u2318' : 'Ctrl')
+    .replace('Command', '\u2318')
+    .replace('Control', 'Ctrl')
+    .replace('Shift', '\u21E7')
+    .replace('Alt', '\u2325')
+    .replace('Option', '\u2325')
+    .replace(/\+/g, ' + ');
+}
+
+// Convert key event to Electron accelerator format
+function keyEventToAccelerator(e: KeyboardEvent): { accelerator: string; isComplete: boolean } {
+  const parts: string[] = [];
+  if (e.metaKey || e.ctrlKey) parts.push('CommandOrControl');
+  if (e.shiftKey) parts.push('Shift');
+  if (e.altKey) parts.push('Alt');
+
+  let key = e.key;
+  const isModifierOnly = ['Meta', 'Control', 'Shift', 'Alt'].includes(key);
+
+  if (!isModifierOnly) {
+    if (key === ' ') key = 'Space';
+    if (key.length === 1) key = key.toUpperCase();
+    const keyMap: Record<string, string> = {
+      'ArrowUp': 'Up', 'ArrowDown': 'Down', 'ArrowLeft': 'Left', 'ArrowRight': 'Right',
+      'Escape': 'Escape', 'Enter': 'Return', 'Backspace': 'Backspace', 'Delete': 'Delete', 'Tab': 'Tab',
+    };
+    if (keyMap[key]) key = keyMap[key];
+    parts.push(key);
+  }
+
+  return { accelerator: parts.join('+'), isComplete: !isModifierOnly && parts.length >= 2 };
+}
+
+// Load settings values into UI
+async function loadSettingsValues() {
+  const keybindDisplay = $('keybind-display');
+  const persistHistoryCheckbox = $('persist-history') as HTMLInputElement;
+  const systemPromptTextarea = $('spotlight-system-prompt') as HTMLTextAreaElement;
+
+  currentAppSettings = await window.claude.getSettings();
+
+  if (currentAppSettings && keybindDisplay) {
+    keybindDisplay.textContent = formatKeybind(currentAppSettings.spotlightKeybind);
+  }
+  if (currentAppSettings && persistHistoryCheckbox) {
+    persistHistoryCheckbox.checked = currentAppSettings.spotlightPersistHistory;
+  }
+  if (currentAppSettings && systemPromptTextarea) {
+    systemPromptTextarea.value = currentAppSettings.spotlightSystemPrompt || '';
+  }
+}
+
+// Save keybind setting
+async function saveKeybindSetting(keybind: string) {
+  if (!currentAppSettings) return;
+  const keybindDisplay = $('keybind-display');
+  currentAppSettings = await window.claude.saveSettings({ spotlightKeybind: keybind });
+  if (keybindDisplay) keybindDisplay.textContent = formatKeybind(keybind);
+}
+
+// Stop keybind recording
+function stopKeybindRecording(save: boolean) {
+  if (!isRecordingKeybind) return;
+  const keybindInput = $('keybind-input');
+  const keybindDisplay = $('keybind-display');
+
+  isRecordingKeybind = false;
+  keybindInput?.classList.remove('recording');
+
+  if (save && pendingKeybind) {
+    saveKeybindSetting(pendingKeybind);
+  } else if (currentAppSettings && keybindDisplay) {
+    keybindDisplay.textContent = formatKeybind(currentAppSettings.spotlightKeybind);
+  }
+  pendingKeybind = null;
+}
+
+// Initialize settings UI event listeners
+function initSettingsUI() {
+  const keybindInput = $('keybind-input');
+  const keybindDisplay = $('keybind-display');
+  const persistHistoryCheckbox = $('persist-history') as HTMLInputElement;
+  const systemPromptTextarea = $('spotlight-system-prompt') as HTMLTextAreaElement;
+
+  // Keybind recording
+  keybindInput?.addEventListener('click', () => {
+    if (!isRecordingKeybind) {
+      isRecordingKeybind = true;
+      pendingKeybind = null;
+      keybindInput.classList.add('recording');
+      if (keybindDisplay) keybindDisplay.textContent = 'Press keys...';
+      keybindInput.focus();
+    }
+  });
+
+  keybindInput?.addEventListener('keydown', (e) => {
+    if (!isRecordingKeybind) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.key === 'Escape') { stopKeybindRecording(false); return; }
+    if (e.key === 'Enter' && pendingKeybind) { stopKeybindRecording(true); return; }
+
+    const result = keyEventToAccelerator(e);
+    if (result.accelerator && keybindDisplay) {
+      keybindDisplay.textContent = formatKeybind(result.accelerator);
+      if (result.isComplete) pendingKeybind = result.accelerator;
+    }
+  });
+
+  keybindInput?.addEventListener('blur', () => {
+    stopKeybindRecording(!!pendingKeybind);
+  });
+
+  // Persist history toggle
+  persistHistoryCheckbox?.addEventListener('change', async () => {
+    if (!currentAppSettings) return;
+    currentAppSettings = await window.claude.saveSettings({ spotlightPersistHistory: persistHistoryCheckbox.checked });
+  });
+
+  // System prompt textarea - save on blur
+  systemPromptTextarea?.addEventListener('blur', async () => {
+    if (!currentAppSettings) return;
+    currentAppSettings = await window.claude.saveSettings({ spotlightSystemPrompt: systemPromptTextarea.value });
+  });
+}
+
+function showSettings() {
+  const login = $('login');
+  const home = $('home');
+  const chat = $('chat');
+  const knowledge = $('knowledge');
+  const settings = $('settings');
+  const sidebarTab = $('sidebar-tab');
+
+  if (login) login.style.display = 'none';
+  if (home) home.classList.remove('active');
+  if (chat) chat.classList.remove('active');
+  if (knowledge) knowledge.classList.remove('active');
+  if (settings) settings.classList.add('active');
+  if (sidebarTab) sidebarTab.classList.add('hidden');
+  closeSidebar();
+
+  // Initialize settings UI if first time
+  if (!settingsInitialized) {
+    initSettingsUI();
+    settingsInitialized = true;
+  }
+  loadSettingsValues();
 }
 
 // Knowledge UI functions
@@ -470,6 +672,341 @@ async function testKnowledgeConnection() {
   }
 
   testBtn.disabled = false;
+}
+
+// Notion settings functions
+async function loadNotionSettings() {
+  const notionToken = $('notion-token') as HTMLInputElement;
+  const notionAutoSync = $('notion-auto-sync') as HTMLInputElement;
+  const notionLastSync = $('notion-last-sync') as HTMLElement;
+  if (!notionToken) return;
+
+  const settings = await window.claude.notionGetSettings();
+  notionToken.value = settings.notionToken || '';
+  if (notionAutoSync) notionAutoSync.checked = settings.syncOnStart !== false;
+
+  if (notionLastSync && settings.lastSync) {
+    const date = new Date(settings.lastSync);
+    notionLastSync.textContent = `Last synced: ${date.toLocaleString()}`;
+  }
+}
+
+async function saveNotionSettings() {
+  const notionToken = $('notion-token') as HTMLInputElement;
+  const notionAutoSync = $('notion-auto-sync') as HTMLInputElement;
+  await window.claude.notionSaveSettings({
+    notionToken: notionToken?.value.trim() || undefined,
+    syncOnStart: notionAutoSync?.checked ?? true
+  });
+}
+
+async function testNotionConnection() {
+  const testBtn = $('notion-test') as HTMLButtonElement;
+  const status = $('notion-status') as HTMLElement;
+  if (!testBtn || !status) return;
+
+  testBtn.disabled = true;
+  status.textContent = 'Testing...';
+  status.className = 'status-text';
+
+  await saveNotionSettings();
+  const result = await window.claude.notionTestConnection();
+
+  if (result.success) {
+    status.textContent = 'Connected!';
+    status.className = 'status-text success';
+  } else {
+    status.textContent = `Error: ${result.error}`;
+    status.className = 'status-text error';
+  }
+  testBtn.disabled = false;
+}
+
+async function syncNotion() {
+  const syncBtn = $('notion-sync') as HTMLButtonElement;
+  const testBtn = $('notion-test') as HTMLButtonElement;
+  const status = $('notion-status') as HTMLElement;
+  const lastSync = $('notion-last-sync') as HTMLElement;
+  if (!syncBtn || !status) return;
+
+  syncBtn.disabled = true;
+  if (testBtn) testBtn.disabled = true;
+  status.textContent = 'Syncing...';
+  status.className = 'status-text';
+
+  await saveNotionSettings();
+  const result = await window.claude.notionSync();
+
+  if (result.success) {
+    status.textContent = `Synced ${result.pagesCount} pages (${result.chunksCount} chunks)`;
+    status.className = 'status-text success';
+    if (lastSync && result.lastSync) {
+      const date = new Date(result.lastSync);
+      lastSync.textContent = `Last synced: ${date.toLocaleString()}`;
+    }
+    await loadKnowledgeDocuments();
+  } else {
+    status.textContent = `Error: ${result.error}`;
+    status.className = 'status-text error';
+  }
+
+  syncBtn.disabled = false;
+  if (testBtn) testBtn.disabled = false;
+}
+
+// RAG settings functions
+async function loadRagSettings() {
+  const enabled = $('rag-enabled') as HTMLInputElement;
+  const ollamaUrl = $('rag-ollama-url') as HTMLInputElement;
+  const model = $('rag-model') as HTMLSelectElement;
+  if (!enabled || !ollamaUrl || !model) return;
+
+  const settings = await window.claude.ragGetSettings?.();
+  if (!settings) return;
+
+  enabled.checked = settings.enabled !== false;
+  ollamaUrl.value = settings.ollamaUrl || 'http://localhost:11434';
+  model.value = settings.model || 'ministral-3:3b';
+}
+
+async function saveRagSettings() {
+  const enabled = $('rag-enabled') as HTMLInputElement;
+  const ollamaUrl = $('rag-ollama-url') as HTMLInputElement;
+  const model = $('rag-model') as HTMLSelectElement;
+  if (!enabled || !ollamaUrl || !model) return;
+
+  await window.claude.ragSaveSettings?.({
+    enabled: enabled.checked,
+    ollamaUrl: ollamaUrl.value.trim() || 'http://localhost:11434',
+    model: model.value
+  });
+}
+
+async function testRagConnection() {
+  const testBtn = $('rag-test-connection') as HTMLButtonElement;
+  const status = $('rag-connection-status') as HTMLElement;
+  if (!testBtn || !status) return;
+
+  testBtn.disabled = true;
+  status.textContent = 'Testing...';
+  status.className = 'status-text';
+
+  await saveRagSettings();
+  const result = await window.claude.ragTestConnection?.();
+
+  if (result?.success) {
+    status.textContent = 'Connected!';
+    status.className = 'status-text success';
+  } else {
+    status.textContent = `Error: ${result?.error || 'Failed to connect'}`;
+    status.className = 'status-text error';
+  }
+  testBtn.disabled = false;
+}
+
+// ============================================================================
+// Manual Notion Page Import Functions
+// ============================================================================
+
+// Tracked page interface (mirrors backend type)
+interface TrackedPage {
+  id: string;
+  url: string;
+  title: string;
+  lastSynced: string;
+  lastEditedTime: string;
+  includeSubpages: boolean;
+}
+
+// Track which pages have updates available
+let pagesWithUpdates: Set<string> = new Set();
+
+/**
+ * Load and render the tracked pages list.
+ */
+async function loadTrackedPages() {
+  const listEl = $('tracked-pages-list');
+  if (!listEl) return;
+
+  const pages = await window.claude.notionGetTrackedPages() as TrackedPage[];
+
+  if (pages.length === 0) {
+    listEl.innerHTML = '<div class="tracked-pages-empty">No tracked pages</div>';
+    return;
+  }
+
+  listEl.innerHTML = pages.map(page => {
+    const hasUpdate = pagesWithUpdates.has(page.id);
+    const syncedDate = new Date(page.lastSynced);
+    const timeAgo = getTimeAgo(syncedDate);
+
+    return `
+      <div class="tracked-page-item" data-page-id="${page.id}">
+        <div class="tracked-page-info">
+          <span class="tracked-page-title">${escapeHtml(page.title)}</span>
+          ${hasUpdate ? '<span class="update-badge">Update</span>' : ''}
+          <span class="tracked-page-time">${timeAgo}</span>
+        </div>
+        <div class="tracked-page-actions">
+          <button class="btn btn-small btn-secondary sync-page-btn" data-page-id="${page.id}">Sync</button>
+          <button class="btn btn-small btn-danger remove-page-btn" data-page-id="${page.id}">✕</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Add event listeners for sync/remove buttons
+  listEl.querySelectorAll('.sync-page-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const pageId = (e.target as HTMLElement).dataset.pageId;
+      if (pageId) syncTrackedPage(pageId);
+    });
+  });
+
+  listEl.querySelectorAll('.remove-page-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const pageId = (e.target as HTMLElement).dataset.pageId;
+      if (pageId) removeTrackedPage(pageId);
+    });
+  });
+}
+
+/**
+ * Format time ago string (e.g., "2h ago", "3d ago").
+ */
+function getTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
+}
+
+/**
+ * Import a Notion page by URL.
+ */
+async function importNotionPage() {
+  const urlInput = $('notion-page-url') as HTMLInputElement;
+  const subpagesToggle = $('notion-include-subpages') as HTMLInputElement;
+  const importBtn = $('notion-import-btn') as HTMLButtonElement;
+  const status = $('import-status') as HTMLElement;
+  if (!urlInput || !importBtn || !status) return;
+
+  const url = urlInput.value.trim();
+  if (!url) {
+    status.textContent = 'Enter a page URL';
+    status.className = 'status-text error';
+    return;
+  }
+
+  importBtn.disabled = true;
+  status.textContent = 'Importing...';
+  status.className = 'status-text';
+
+  const includeSubpages = subpagesToggle?.checked ?? false;
+  const result = await window.claude.notionImportPage(url, includeSubpages);
+
+  if (result.success) {
+    status.textContent = `Imported ${result.pagesCount} page(s)`;
+    status.className = 'status-text success';
+    urlInput.value = '';
+    await loadTrackedPages();
+    await loadKnowledgeDocuments();
+  } else {
+    status.textContent = `Error: ${result.error}`;
+    status.className = 'status-text error';
+  }
+
+  importBtn.disabled = false;
+}
+
+/**
+ * Check all tracked pages for updates.
+ */
+async function checkForUpdates() {
+  const checkBtn = $('check-updates-btn') as HTMLButtonElement;
+  if (!checkBtn) return;
+
+  checkBtn.disabled = true;
+  checkBtn.textContent = 'Checking...';
+
+  const result = await window.claude.notionCheckUpdates();
+
+  if (result.success) {
+    pagesWithUpdates = new Set(result.updates.map((u: { id: string }) => u.id));
+    const count = result.updates.length;
+    checkBtn.textContent = count > 0 ? `${count} Update${count > 1 ? 's' : ''}` : 'Check Updates';
+    await loadTrackedPages();
+  } else {
+    checkBtn.textContent = 'Check Updates';
+  }
+
+  checkBtn.disabled = false;
+}
+
+/**
+ * Remove a tracked page.
+ */
+async function removeTrackedPage(pageId: string) {
+  const result = await window.claude.notionRemoveTrackedPage(pageId);
+  if (result.success) {
+    pagesWithUpdates.delete(pageId);
+    await loadTrackedPages();
+    await loadKnowledgeDocuments();
+  }
+}
+
+/**
+ * Re-sync a single tracked page.
+ */
+async function syncTrackedPage(pageId: string) {
+  const btn = document.querySelector(`.sync-page-btn[data-page-id="${pageId}"]`) as HTMLButtonElement;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+  }
+
+  const result = await window.claude.notionSyncTrackedPage(pageId);
+
+  if (result.success) {
+    pagesWithUpdates.delete(pageId);
+    await loadTrackedPages();
+    await loadKnowledgeDocuments();
+  }
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = 'Sync';
+  }
+}
+
+/**
+ * Show the import Notion modal.
+ */
+function showImportModal() {
+  const modal = $('import-modal');
+  if (modal) {
+    modal.classList.add('open');
+    loadTrackedPages(); // Refresh tracked pages when opening
+  }
+}
+
+/**
+ * Hide the import Notion modal.
+ */
+function hideImportModal() {
+  const modal = $('import-modal');
+  const status = $('import-status');
+  if (modal) modal.classList.remove('open');
+  if (status) {
+    status.textContent = '';
+    status.className = 'status-text';
+  }
 }
 
 function showKnowledgeIngestStatus(message: string, type: 'loading' | 'success' | 'error') {
@@ -578,7 +1115,8 @@ function renderKnowledgeItems(items: (KnowledgeItem | KnowledgeSearchResult)[], 
       const type = first.metadata?.type || 'txt';
       const icon = typeIcons[type] || '📄';
       const title = first.metadata?.filename || source.split('/').pop() || 'Unknown';
-      const preview = (first.content || '').slice(0, 100);
+      // More preview text for masonry variety (CSS handles truncation)
+      const preview = (first.content || '').slice(0, 400);
       const avgScore = showScores
         ? (chunks.reduce((sum, c) => sum + ((c as KnowledgeSearchResult).score || 0), 0) / chunks.length)
         : 0;
@@ -587,7 +1125,7 @@ function renderKnowledgeItems(items: (KnowledgeItem | KnowledgeSearchResult)[], 
         <div class="knowledge-card" data-source="${escapeHtml(source)}">
           <div class="card-icon">${icon}</div>
           <div class="card-title">${escapeHtml(title)}</div>
-          <div class="card-preview">${escapeHtml(preview)}${preview.length >= 100 ? '...' : ''}</div>
+          <div class="card-preview">${escapeHtml(preview)}</div>
           <div class="card-meta">
             <span class="card-chunks">${chunks.length} chunk${chunks.length !== 1 ? 's' : ''}</span>
             ${showScores ? `<span class="card-score">${(avgScore * 100).toFixed(0)}%</span>` : ''}
@@ -707,19 +1245,12 @@ function setupDropZone() {
 }
 
 function initKnowledgeUI() {
-  // Toggle settings section
-  const toggleConnectionBtn = $('toggle-connection');
-  const connectionContent = $('connection-content');
-  toggleConnectionBtn?.addEventListener('click', () => {
-    if (!connectionContent) return;
-    const isExpanded = !connectionContent.classList.contains('collapsed');
-    if (isExpanded) {
-      connectionContent.classList.add('collapsed');
-      toggleConnectionBtn.classList.remove('expanded');
-    } else {
-      connectionContent.classList.remove('collapsed');
-      toggleConnectionBtn.classList.add('expanded');
-    }
+  // Collapsible settings sections toggle
+  document.querySelectorAll('.settings-section-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const section = header.closest('.settings-section');
+      section?.classList.toggle('expanded');
+    });
   });
 
   // Test connection button
@@ -734,7 +1265,10 @@ function initKnowledgeUI() {
     }
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hidePreviewModal();
+    if (e.key === 'Escape') {
+      hidePreviewModal();
+      hideImportModal();
+    }
   });
 
   // File input kept for drag & drop compatibility (handled in setupDropZone)
@@ -797,6 +1331,22 @@ function initKnowledgeUI() {
     addMenu?.classList.remove('open');
   });
 
+  // Add Menu: Import Notion
+  $('add-menu-notion')?.addEventListener('click', () => {
+    addMenu?.classList.remove('open');
+    showImportModal();
+  });
+
+  // Import Modal: Close button
+  $('import-modal-close')?.addEventListener('click', hideImportModal);
+
+  // Import Modal: Click backdrop to close
+  $('import-modal')?.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).classList.contains('import-modal')) {
+      hideImportModal();
+    }
+  });
+
   // Search input with debounce
   const searchInput = $('search-input') as HTMLInputElement;
   searchInput?.addEventListener('input', () => {
@@ -806,8 +1356,36 @@ function initKnowledgeUI() {
     }, 300);
   });
 
+  // Notion: Test connection button
+  $('notion-test')?.addEventListener('click', testNotionConnection);
+
+  // Notion: Sync button
+  $('notion-sync')?.addEventListener('click', syncNotion);
+
+  // Notion: Save settings on token blur
+  $('notion-token')?.addEventListener('blur', saveNotionSettings);
+
+  // Notion: Save settings on checkbox change
+  $('notion-auto-sync')?.addEventListener('change', saveNotionSettings);
+
+  // Manual Import: Import button
+  $('notion-import-btn')?.addEventListener('click', importNotionPage);
+
+  // Manual Import: Check updates button
+  $('check-updates-btn')?.addEventListener('click', checkForUpdates);
+
+  // RAG: Test connection button
+  $('rag-test-connection')?.addEventListener('click', testRagConnection);
+
+  // RAG: Save settings on input change
+  $('rag-enabled')?.addEventListener('change', saveRagSettings);
+  $('rag-ollama-url')?.addEventListener('blur', saveRagSettings);
+  $('rag-model')?.addEventListener('change', saveRagSettings);
+
   // Load initial settings
   loadKnowledgeSettings();
+  loadNotionSettings();
+  loadRagSettings();
 }
 
 // Sidebar functions
@@ -1425,6 +2003,26 @@ function buildStepItem(step: Step, isActive: boolean): string {
         </div>
       </div>
     `;
+  } else if (step.type === 'rag') {
+    // RAG step - shows knowledge retrieval status (green color via CSS)
+    const label = step.ragMessage || 'Searching knowledge...';
+    return `
+      <div class="step-item rag ${isActive ? 'active' : ''}" data-index="rag">
+        <div class="step-timeline-col">
+          <div class="step-dot-row">
+            <div class="step-line-top"></div>
+            <div class="step-dot"></div>
+            <div class="step-line-bottom"></div>
+          </div>
+        </div>
+        <div class="step-content-col">
+          <div class="step-header">
+            <span class="step-label">${escapeHtml(label)}</span>
+            ${isActive ? '<div class="step-spinner"></div>' : '<span class="step-check">✓</span>'}
+          </div>
+        </div>
+      </div>
+    `;
   }
   return '';
 }
@@ -1465,6 +2063,16 @@ function buildInterleavedContent(steps: Step[]): string {
 function buildStreamingContent(): string {
   const allBlocks: Step[] = [];
 
+  // RAG block first (happens before Claude starts processing)
+  if (streamingBlocks.ragBlock) {
+    allBlocks.push({
+      type: 'rag',
+      index: -1, // Ensure RAG shows first
+      ragMessage: streamingBlocks.ragBlock.message,
+      isActive: streamingBlocks.ragBlock.status === 'agent_thinking' || streamingBlocks.ragBlock.status === 'searching'
+    });
+  }
+
   streamingBlocks.thinkingBlocks.forEach((block, idx) => {
     allBlocks.push({
       type: 'thinking',
@@ -1495,6 +2103,7 @@ function buildStreamingContent(): string {
     });
   });
 
+  // Check if we have any displayable content (RAG alone counts)
   if (allBlocks.length === 0) return '';
 
   allBlocks.sort((a, b) => (a.index || 0) - (b.index || 0));
@@ -1973,6 +2582,25 @@ async function init() {
     }
   });
 
+  // RAG status listener (knowledge base retrieval)
+  window.claude.onRagStatus?.(d => {
+    if (currentStreamingElement && d.conversationId === conversationId) {
+      hideEmptyState();
+      if (d.status === 'skipped' || d.status === 'error') {
+        // Clear RAG block when skipped or errored
+        streamingBlocks.ragBlock = null;
+      } else {
+        streamingBlocks.ragBlock = {
+          status: d.status,
+          message: d.message,
+          detail: d.detail
+        };
+      }
+      updateStreamingContent();
+      scrollToBottom();
+    }
+  });
+
   window.claude.onMessageStream(d => {
     if (currentStreamingElement && d.conversationId === conversationId) {
       hideEmptyState();
@@ -2026,17 +2654,37 @@ function setupEventListeners() {
     showKnowledge();
   });
 
+  // Home settings button - shows settings view inline
+  $('home-settings-btn')?.addEventListener('click', () => {
+    showSettings();
+  });
+
   // Knowledge back button - returns to home
   $('knowledge-back-btn')?.addEventListener('click', () => {
     showHome();
   });
 
+  // Listen for show-knowledge-view from tray menu
+  window.claude.onShowKnowledgeView?.(() => {
+    showKnowledge();
+  });
+
+  // Listen for show-settings-view from tray menu
+  window.claude.onShowSettingsView?.(() => {
+    showSettings();
+  });
+
   // New chat button
   $('new-chat-btn')?.addEventListener('click', newChat);
 
-  // Settings button
+  // Settings button - now shows inline settings view
   $('settings-btn')?.addEventListener('click', () => {
-    window.claude.openSettings();
+    showSettings();
+  });
+
+  // Settings back button
+  $('settings-back-btn')?.addEventListener('click', () => {
+    showHome();
   });
 
   // Sidebar toggle

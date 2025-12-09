@@ -2,6 +2,7 @@
 export interface SettingsSchema {
   spotlightKeybind: string;
   spotlightPersistHistory: boolean;
+  spotlightSystemPrompt: string; // Instructions prepended to all spotlight messages
 }
 
 // Knowledge settings (re-exported for StoreSchema compatibility)
@@ -11,6 +12,34 @@ export interface KnowledgeSettingsStore {
   collectionName: string;
 }
 
+// Tracked Notion page for manual import with update detection
+export interface TrackedNotionPage {
+  id: string;              // Notion page ID (32-char hex)
+  url: string;             // Page URL (used as source in Qdrant)
+  title: string;           // Page title for display
+  lastSynced: string;      // ISO timestamp when we last synced
+  lastEditedTime: string;  // Notion's last_edited_time for update detection
+  includeSubpages: boolean; // Whether subpages were imported
+}
+
+// Notion settings (for StoreSchema)
+export interface NotionSettingsStore {
+  notionToken?: string;
+  lastSync?: string;
+  syncOnStart: boolean;
+  trackedPages?: TrackedNotionPage[]; // Manually imported pages
+}
+
+// RAG settings (for StoreSchema)
+export interface RAGSettingsStore {
+  enabled: boolean;
+  ollamaUrl: string;
+  model: string;
+  maxQueries: number;
+  maxContextChunks: number;
+  minRelevanceScore: number;
+}
+
 // Store schema for electron-store
 export interface StoreSchema {
   orgId?: string;
@@ -18,6 +47,8 @@ export interface StoreSchema {
   anonymousId?: string;
   settings: SettingsSchema;
   knowledgeSettings?: KnowledgeSettingsStore;
+  notionSettings?: NotionSettingsStore;
+  ragSettings?: RAGSettingsStore;
 }
 
 // File attachment payloads

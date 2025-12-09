@@ -61,6 +61,15 @@ contextBridge.exposeInMainWorld('claude', {
   onMessageCompaction: (callback: (data: { conversationId: string; status: string; message?: string }) => void) => {
     ipcRenderer.on('message-compaction', (_event, data) => callback(data));
   },
+  // RAG status events (for knowledge base retrieval indicators)
+  onRagStatus: (callback: (data: {
+    conversationId: string;
+    status: 'agent_thinking' | 'searching' | 'complete' | 'skipped' | 'error';
+    message: string;
+    detail?: { queriesGenerated?: number; chunksRetrieved?: number; processingTimeMs?: number };
+  }) => void) => {
+    ipcRenderer.on('rag-status', (_event, data) => callback(data));
+  },
   removeStreamListeners: () => {
     ipcRenderer.removeAllListeners('message-stream');
     ipcRenderer.removeAllListeners('message-complete');
@@ -71,6 +80,7 @@ contextBridge.exposeInMainWorld('claude', {
     ipcRenderer.removeAllListeners('message-citation');
     ipcRenderer.removeAllListeners('message-tool-approval');
     ipcRenderer.removeAllListeners('message-compaction');
+    ipcRenderer.removeAllListeners('rag-status');
   },
 
   // Spotlight functions
@@ -94,6 +104,10 @@ contextBridge.exposeInMainWorld('claude', {
   onSpotlightToolResult: (callback: (data: { toolName: string; isError: boolean; result?: unknown }) => void) => {
     ipcRenderer.on('spotlight-tool-result', (_event, data) => callback(data));
   },
+  // Spotlight RAG status (for knowledge retrieval in spotlight)
+  onSpotlightRag: (callback: (data: { status: string; message: string }) => void) => {
+    ipcRenderer.on('spotlight-rag', (_event, data) => callback(data));
+  },
   removeSpotlightListeners: () => {
     ipcRenderer.removeAllListeners('spotlight-stream');
     ipcRenderer.removeAllListeners('spotlight-complete');
@@ -101,6 +115,7 @@ contextBridge.exposeInMainWorld('claude', {
     ipcRenderer.removeAllListeners('spotlight-thinking-stream');
     ipcRenderer.removeAllListeners('spotlight-tool');
     ipcRenderer.removeAllListeners('spotlight-tool-result');
+    ipcRenderer.removeAllListeners('spotlight-rag');
   },
   spotlightReset: () => ipcRenderer.invoke('spotlight-reset'),
   spotlightGetHistory: () => ipcRenderer.invoke('spotlight-get-history'),
@@ -115,10 +130,20 @@ contextBridge.exposeInMainWorld('claude', {
     ipcRenderer.on('toggle-search-modal', () => callback());
   },
 
+  // Show knowledge view (triggered by tray menu or IPC)
+  onShowKnowledgeView: (callback: () => void) => {
+    ipcRenderer.on('show-knowledge-view', () => callback());
+  },
+
+  // Show settings view (triggered by tray menu or IPC)
+  onShowSettingsView: (callback: () => void) => {
+    ipcRenderer.on('show-settings-view', () => callback());
+  },
+
   // Settings functions
   openSettings: () => ipcRenderer.invoke('open-settings'),
   getSettings: () => ipcRenderer.invoke('get-settings'),
-  saveSettings: (settings: { spotlightKeybind?: string; spotlightPersistHistory?: boolean }) =>
+  saveSettings: (settings: { spotlightKeybind?: string; spotlightPersistHistory?: boolean; spotlightSystemPrompt?: string }) =>
     ipcRenderer.invoke('save-settings', settings),
 
   // Knowledge Management functions
@@ -134,4 +159,27 @@ contextBridge.exposeInMainWorld('claude', {
   knowledgeList: () => ipcRenderer.invoke('knowledge-list'),
   knowledgeDelete: (ids: string[]) => ipcRenderer.invoke('knowledge-delete', ids),
   knowledgeDeleteBySource: (source: string) => ipcRenderer.invoke('knowledge-delete-by-source', source),
+
+  // Notion Integration functions
+  notionGetSettings: () => ipcRenderer.invoke('notion-get-settings'),
+  notionSaveSettings: (settings: { notionToken?: string; syncOnStart?: boolean }) =>
+    ipcRenderer.invoke('notion-save-settings', settings),
+  notionTestConnection: () => ipcRenderer.invoke('notion-test-connection'),
+  notionSync: () => ipcRenderer.invoke('notion-sync'),
+
+  // Manual Notion Import functions
+  notionImportPage: (urlOrId: string, includeSubpages: boolean) =>
+    ipcRenderer.invoke('notion-import-page', urlOrId, includeSubpages),
+  notionGetTrackedPages: () => ipcRenderer.invoke('notion-get-tracked-pages'),
+  notionRemoveTrackedPage: (pageId: string) =>
+    ipcRenderer.invoke('notion-remove-tracked-page', pageId),
+  notionCheckUpdates: () => ipcRenderer.invoke('notion-check-updates'),
+  notionSyncTrackedPage: (pageId: string) =>
+    ipcRenderer.invoke('notion-sync-tracked-page', pageId),
+
+  // RAG Agent Settings (Ollama-powered knowledge retrieval)
+  ragGetSettings: () => ipcRenderer.invoke('rag-get-settings'),
+  ragSaveSettings: (settings: { enabled?: boolean; ollamaUrl?: string; model?: string; maxQueries?: number; maxContextChunks?: number; minRelevanceScore?: number }) =>
+    ipcRenderer.invoke('rag-save-settings', settings),
+  ragTestConnection: () => ipcRenderer.invoke('rag-test-connection'),
 });

@@ -360,6 +360,20 @@
       background: #5856D6;
     }
 
+    .step-item.rag .step-dot {
+      background: #34C759;
+    }
+
+    .step-item.rag .step-spinner {
+      border-color: rgba(52, 199, 89, 0.2);
+      border-top-color: #34C759;
+    }
+
+    .step-item.rag .step-check {
+      color: #34C759;
+      font-size: 12px;
+    }
+
     .step-line-bottom {
       width: 1px;
       flex: 1;

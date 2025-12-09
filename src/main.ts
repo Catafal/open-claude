@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { isAuthenticated, getOrgId, makeRequest, streamCompletion, stopResponse, generateTitle, store, BASE_URL, prepareAttachmentPayload } from './api/client';
 import { createStreamState, processSSEChunk, type StreamCallbacks } from './streaming/parser';
-import type { SettingsSchema, AttachmentPayload, UploadFilePayload, KnowledgeSettingsStore } from './types';
+import type { SettingsSchema, AttachmentPayload, UploadFilePayload, KnowledgeSettingsStore, NotionSettingsStore, TrackedNotionPage } from './types';
 import {
   generateEmbedding,
   initQdrantClient,
@@ -17,23 +17,45 @@ import {
   parseFile,
   parseUrl,
   DEFAULT_KNOWLEDGE_SETTINGS,
+  DEFAULT_NOTION_SETTINGS,
+  initNotionClient,
+  testNotionConnection,
+  listNotionPages,
+  fetchPageContent,
+  extractPageIdFromUrl,
+  fetchPageMeta,
+  fetchChildPages,
   type KnowledgeSettings,
+  type NotionSettings,
   type KnowledgeItem
 } from './knowledge';
+import {
+  processRagQuery,
+  formatContextForClaude,
+  initOllamaClient,
+  checkOllamaHealth,
+  DEFAULT_RAG_SETTINGS,
+  type RAGSettings
+} from './rag';
 
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
-let settingsWindow: BrowserWindow | null = null;
-let knowledgeWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
 // Knowledge settings (loaded from store)
 let knowledgeSettings: KnowledgeSettings = { ...DEFAULT_KNOWLEDGE_SETTINGS };
 
+// Notion settings (loaded from store)
+let notionSettings: NotionSettings = { ...DEFAULT_NOTION_SETTINGS };
+
+// RAG settings (loaded from store)
+let ragSettings: RAGSettings = { ...DEFAULT_RAG_SETTINGS };
+
 // Default settings
 const DEFAULT_SETTINGS: SettingsSchema = {
   spotlightKeybind: 'CommandOrControl+Shift+C',
   spotlightPersistHistory: true,
+  spotlightSystemPrompt: 'search for real citations that verify your response, if you do some affirmation',
 };
 
 // Get settings with defaults
@@ -135,68 +157,13 @@ function createMainWindow() {
   mainWindow.loadFile(path.join(__dirname, '../static/index.html'));
 }
 
-// Create settings window
-function createSettingsWindow() {
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.focus();
-    return;
+// Show settings view in main window (inline navigation)
+function showSettingsView() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('show-settings-view');
   }
-
-  settingsWindow = new BrowserWindow({
-    width: 480,
-    height: 520,
-    minWidth: 400,
-    minHeight: 400,
-    transparent: true,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
-    backgroundColor: '#00000000',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 16 },
-  });
-
-  settingsWindow.loadFile(path.join(__dirname, '../static/settings.html'));
-
-  settingsWindow.on('closed', () => {
-    settingsWindow = null;
-  });
-}
-
-// Create knowledge management window
-function createKnowledgeWindow() {
-  if (knowledgeWindow && !knowledgeWindow.isDestroyed()) {
-    knowledgeWindow.focus();
-    return;
-  }
-
-  knowledgeWindow = new BrowserWindow({
-    width: 700,
-    height: 600,
-    minWidth: 500,
-    minHeight: 450,
-    transparent: true,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
-    backgroundColor: '#00000000',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 16 },
-  });
-
-  knowledgeWindow.loadFile(path.join(__dirname, '../static/knowledge.html'));
-
-  knowledgeWindow.on('closed', () => {
-    knowledgeWindow = null;
-  });
 }
 
 /**
@@ -236,11 +203,17 @@ function createTray() {
       },
       {
         label: 'Settings',
-        click: () => createSettingsWindow()
+        click: () => showSettingsView()
       },
       {
         label: 'Knowledge',
-        click: () => createKnowledgeWindow()
+        click: () => {
+          if (mainWindow) {
+            mainWindow.show();
+            mainWindow.focus();
+            mainWindow.webContents.send('show-knowledge-view');
+          }
+        }
       },
       { type: 'separator' },
       {
@@ -286,6 +259,13 @@ let spotlightMessages: Array<{ role: 'user' | 'assistant'; text: string }> = [];
 ipcMain.handle('spotlight-send', async (_event, message: string) => {
   const orgId = await getOrgId();
   if (!orgId) throw new Error('Not authenticated');
+
+  // Get system prompt from settings and prepend if configured
+  const settings = getSettings();
+  const systemPrompt = settings.spotlightSystemPrompt?.trim();
+  const promptWithSystem = systemPrompt
+    ? `[System instruction: ${systemPrompt}]\n\n${message}`
+    : message;
 
   if (!spotlightConversationId) {
     // Create spotlight conversation in incognito mode (is_temporary: true)
@@ -346,7 +326,69 @@ ipcMain.handle('spotlight-send', async (_event, message: string) => {
     }
   };
 
-  await streamCompletion(orgId, conversationId, message, parentMessageUuid, (chunk) => {
+  // === RAG Processing for Spotlight ===
+  let finalPrompt = promptWithSystem;
+
+  if (ragSettings.enabled && knowledgeSettings.collectionName) {
+    try {
+      // Notify Spotlight UI: Agent is analyzing
+      spotlightWindow?.webContents.send('spotlight-rag', {
+        status: 'agent_thinking',
+        message: 'Searching knowledge...'
+      });
+
+      const ragResult = await processRagQuery(
+        message,  // Use original message for RAG decision, not the system-prompted version
+        knowledgeSettings.collectionName,
+        ragSettings
+      );
+
+      // Use cleaned_query to remove "my files/notes" references
+      const cleanedQuery = ragResult.decision.cleaned_query || message;
+      const cleanedPromptWithSystem = systemPrompt
+        ? `[System instruction: ${systemPrompt}]\n\n${cleanedQuery}`
+        : cleanedQuery;
+
+      if (ragResult.decision.needs_retrieval && ragResult.contexts.length > 0) {
+        // Notify Spotlight UI: Found context
+        spotlightWindow?.webContents.send('spotlight-rag', {
+          status: 'complete',
+          message: `Found ${ragResult.contexts.length} sources`
+        });
+
+        // Inject context + use cleaned query
+        finalPrompt = formatContextForClaude(ragResult.contexts) + cleanedPromptWithSystem;
+        console.log(`[RAG/Spotlight] Injected ${ragResult.contexts.length} context chunks`);
+        console.log(`[RAG/Spotlight] Cleaned query: "${cleanedQuery}"`);
+      } else if (ragResult.decision.needs_retrieval) {
+        // Retrieval was needed but no results found - still use cleaned query
+        spotlightWindow?.webContents.send('spotlight-rag', {
+          status: 'skipped',
+          message: 'No matching content'
+        });
+        finalPrompt = cleanedPromptWithSystem;
+        console.log(`[RAG/Spotlight] No results, using cleaned query: "${cleanedQuery}"`);
+      } else {
+        // Notify Spotlight UI: No retrieval needed
+        spotlightWindow?.webContents.send('spotlight-rag', {
+          status: 'skipped',
+          message: ''
+        });
+      }
+    } catch (ragError: unknown) {
+      // Non-blocking error - continue without RAG
+      const errorMessage = ragError instanceof Error ? ragError.message : String(ragError);
+      console.error('[RAG/Spotlight] Error (continuing):', errorMessage);
+      spotlightWindow?.webContents.send('spotlight-rag', {
+        status: 'error',
+        message: 'RAG unavailable'
+      });
+    }
+  }
+  // === End RAG Processing ===
+
+  // Use finalPrompt (includes RAG context + system instruction) for the API call
+  await streamCompletion(orgId, conversationId, finalPrompt, parentMessageUuid, (chunk) => {
     processSSEChunk(chunk, state, callbacks);
   });
 
@@ -707,7 +749,77 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
   // Send Claude the uploaded file UUIDs (metadata stays client-side for display)
   const fileIds = attachments?.map(a => a.document_id).filter(Boolean) || [];
 
-  await streamCompletion(orgId, conversationId, message, parentMessageUuid, (chunk) => {
+  // === RAG Processing ===
+  // If RAG is enabled and knowledge base is configured, use local agent to decide on retrieval
+  let augmentedMessage = message;
+
+  if (ragSettings.enabled && knowledgeSettings.collectionName) {
+    try {
+      // Notify UI: Agent is analyzing the query
+      mainWindow?.webContents.send('rag-status', {
+        conversationId,
+        status: 'agent_thinking',
+        message: 'Analyzing query...'
+      });
+
+      const ragResult = await processRagQuery(
+        message,
+        knowledgeSettings.collectionName,
+        ragSettings
+      );
+
+      // Use cleaned_query to remove "my files/notes" references (prevents Claude from searching again)
+      const cleanedQuery = ragResult.decision.cleaned_query || message;
+
+      if (ragResult.decision.needs_retrieval && ragResult.contexts.length > 0) {
+        // Notify UI: Found relevant context
+        mainWindow?.webContents.send('rag-status', {
+          conversationId,
+          status: 'complete',
+          message: `Found ${ragResult.contexts.length} relevant sources`,
+          detail: {
+            queriesGenerated: ragResult.decision.search_queries.length,
+            chunksRetrieved: ragResult.contexts.length,
+            processingTimeMs: ragResult.processingTimeMs
+          }
+        });
+
+        // Inject context + use cleaned query
+        augmentedMessage = formatContextForClaude(ragResult.contexts) + cleanedQuery;
+        console.log(`[RAG] Injected ${ragResult.contexts.length} context chunks (${ragResult.processingTimeMs}ms)`);
+        console.log(`[RAG] Cleaned query: "${cleanedQuery}"`);
+      } else if (ragResult.decision.needs_retrieval) {
+        // Retrieval was needed but no results found - still use cleaned query
+        mainWindow?.webContents.send('rag-status', {
+          conversationId,
+          status: 'skipped',
+          message: 'No matching content found'
+        });
+        augmentedMessage = cleanedQuery;
+        console.log(`[RAG] No results, using cleaned query: "${cleanedQuery}"`);
+      } else {
+        // Notify UI: No retrieval needed
+        mainWindow?.webContents.send('rag-status', {
+          conversationId,
+          status: 'skipped',
+          message: ragResult.decision.reasoning || 'No retrieval needed'
+        });
+        console.log(`[RAG] Skipped: ${ragResult.decision.reasoning}`);
+      }
+    } catch (ragError: unknown) {
+      // RAG errors are non-blocking - log and continue with original message
+      const errorMessage = ragError instanceof Error ? ragError.message : String(ragError);
+      console.error('[RAG] Processing error (continuing without RAG):', errorMessage);
+      mainWindow?.webContents.send('rag-status', {
+        conversationId,
+        status: 'error',
+        message: 'RAG unavailable'
+      });
+    }
+  }
+  // === End RAG Processing ===
+
+  await streamCompletion(orgId, conversationId, augmentedMessage, parentMessageUuid, (chunk) => {
     processSSEChunk(chunk, state, callbacks);
   }, { attachments: [], files: fileIds });
 
@@ -736,7 +848,7 @@ ipcMain.handle('generate-title', async (_event, conversationId: string, messageC
 
 // Settings IPC handlers
 ipcMain.handle('open-settings', async () => {
-  createSettingsWindow();
+  showSettingsView();
 });
 
 ipcMain.handle('get-settings', async () => {
@@ -756,9 +868,13 @@ ipcMain.handle('save-settings', async (_event, settings: Partial<SettingsSchema>
 // Knowledge Management IPC Handlers
 // ============================================================================
 
-// Open knowledge window
+// Open knowledge view in main window
 ipcMain.handle('open-knowledge', async () => {
-  createKnowledgeWindow();
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('show-knowledge-view');
+  }
 });
 
 // Open file dialog for knowledge files
@@ -809,6 +925,57 @@ ipcMain.handle('knowledge-test-connection', async () => {
     return { success: false, error: error.message };
   }
 });
+
+// ============================================================================
+// RAG Settings (Agentic RAG with Ollama)
+// ============================================================================
+
+// Get RAG settings
+ipcMain.handle('rag-get-settings', async () => {
+  const stored = store.get('ragSettings') as RAGSettings | undefined;
+  ragSettings = { ...DEFAULT_RAG_SETTINGS, ...stored };
+
+  // Initialize Ollama client with stored URL
+  if (ragSettings.ollamaUrl) {
+    initOllamaClient(ragSettings.ollamaUrl);
+  }
+
+  return ragSettings;
+});
+
+// Save RAG settings
+ipcMain.handle('rag-save-settings', async (_event, settings: Partial<RAGSettings>) => {
+  ragSettings = { ...ragSettings, ...settings };
+  store.set('ragSettings', ragSettings);
+
+  // Reinitialize Ollama client if URL changed
+  if (settings.ollamaUrl) {
+    initOllamaClient(ragSettings.ollamaUrl);
+  }
+
+  console.log('[RAG] Settings saved:', ragSettings);
+  return ragSettings;
+});
+
+// Test Ollama connection
+ipcMain.handle('rag-test-connection', async () => {
+  try {
+    initOllamaClient(ragSettings.ollamaUrl);
+    const health = await checkOllamaHealth(ragSettings.model);
+
+    if (health.available) {
+      return { success: true, models: health.models };
+    } else {
+      return { success: false, error: health.error };
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[RAG] Connection test failed:', errorMessage);
+    return { success: false, error: errorMessage };
+  }
+});
+
+// ============================================================================
 
 // Ingest a file into knowledge base
 ipcMain.handle('knowledge-ingest-file', async (_event, filePath: string) => {
@@ -963,6 +1130,400 @@ ipcMain.handle('knowledge-delete-by-source', async (_event, source: string) => {
   }
 });
 
+// ============================================================================
+// Notion Integration IPC Handlers
+// ============================================================================
+
+// Get Notion settings
+ipcMain.handle('notion-get-settings', async () => {
+  const stored = store.get('notionSettings') as NotionSettingsStore | undefined;
+  notionSettings = { ...DEFAULT_NOTION_SETTINGS, ...stored };
+  return notionSettings;
+});
+
+// Save Notion settings
+ipcMain.handle('notion-save-settings', async (_event, settings: Partial<NotionSettings>) => {
+  notionSettings = { ...notionSettings, ...settings };
+  store.set('notionSettings', notionSettings as NotionSettingsStore);
+
+  // Initialize client if token provided
+  if (settings.notionToken) {
+    try {
+      initNotionClient(settings.notionToken);
+    } catch (error) {
+      console.error('[Notion] Failed to initialize client:', error);
+    }
+  }
+
+  return notionSettings;
+});
+
+// Test Notion connection
+ipcMain.handle('notion-test-connection', async () => {
+  try {
+    if (!notionSettings.notionToken) {
+      return { success: false, error: 'No token configured' };
+    }
+
+    initNotionClient(notionSettings.notionToken);
+    await testNotionConnection();
+    return { success: true };
+  } catch (error: any) {
+    console.error('[Notion] Connection test failed:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// Sync all Notion pages to Qdrant
+ipcMain.handle('notion-sync', async () => {
+  try {
+    if (!notionSettings.notionToken) {
+      return { success: false, error: 'No token configured' };
+    }
+
+    // Initialize clients
+    initNotionClient(notionSettings.notionToken);
+    initQdrantClient(knowledgeSettings);
+    await ensureCollection(knowledgeSettings.collectionName);
+
+    console.log('[Notion] Starting sync...');
+
+    // Get all accessible pages
+    const pages = await listNotionPages();
+    console.log(`[Notion] Found ${pages.length} pages to sync`);
+
+    let totalChunks = 0;
+
+    // Process each page
+    for (const page of pages) {
+      try {
+        console.log(`[Notion] Processing: ${page.title}`);
+
+        // Fetch page content
+        const content = await fetchPageContent(page.id);
+        if (!content.trim()) {
+          console.log(`[Notion] Skipping empty page: ${page.title}`);
+          continue;
+        }
+
+        // Delete existing chunks for this page (re-sync)
+        await deleteBySource(knowledgeSettings.collectionName, page.url);
+
+        // Chunk the content
+        const chunks = chunkText(content);
+        console.log(`[Notion] ${page.title}: ${chunks.length} chunks`);
+
+        // Generate embeddings and prepare items
+        const items: KnowledgeItem[] = [];
+        for (const chunk of chunks) {
+          const vector = await generateEmbedding(chunk.text);
+          items.push({
+            id: crypto.randomUUID(),
+            content: chunk.text,
+            metadata: {
+              source: page.url,
+              filename: page.title,
+              type: 'notion',
+              chunkIndex: chunk.index,
+              totalChunks: chunks.length,
+              dateAdded: new Date().toISOString()
+            },
+            vector
+          });
+        }
+
+        // Upsert in batches
+        const BATCH_SIZE = 100;
+        for (let i = 0; i < items.length; i += BATCH_SIZE) {
+          const batch = items.slice(i, i + BATCH_SIZE);
+          await upsertVectors(knowledgeSettings.collectionName, batch);
+        }
+
+        totalChunks += items.length;
+
+        // Small delay to respect rate limits (3 req/sec)
+        await new Promise(resolve => setTimeout(resolve, 350));
+
+      } catch (pageError: any) {
+        console.error(`[Notion] Error processing page ${page.title}:`, pageError.message);
+        // Continue with next page
+      }
+    }
+
+    // Update last sync timestamp
+    notionSettings.lastSync = new Date().toISOString();
+    store.set('notionSettings', notionSettings as NotionSettingsStore);
+
+    console.log(`[Notion] Sync complete: ${pages.length} pages, ${totalChunks} chunks`);
+
+    return {
+      success: true,
+      pagesCount: pages.length,
+      chunksCount: totalChunks,
+      lastSync: notionSettings.lastSync
+    };
+
+  } catch (error: any) {
+    console.error('[Notion] Sync failed:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// ============================================================================
+// Manual Notion Page Import IPC Handlers
+// ============================================================================
+
+/**
+ * Helper: Sync a single page to Qdrant.
+ * Shared logic for import and re-sync operations.
+ */
+async function syncSinglePage(
+  pageId: string,
+  pageUrl: string,
+  pageTitle: string
+): Promise<{ chunksCount: number }> {
+  // Fetch page content
+  const content = await fetchPageContent(pageId);
+  if (!content.trim()) {
+    console.log(`[Notion] Page is empty: ${pageTitle}`);
+    return { chunksCount: 0 };
+  }
+
+  // Delete existing chunks (for re-sync)
+  await deleteBySource(knowledgeSettings.collectionName, pageUrl);
+
+  // Chunk the content
+  const chunks = chunkText(content);
+  console.log(`[Notion] ${pageTitle}: ${chunks.length} chunks`);
+
+  // Generate embeddings and prepare items
+  const items: KnowledgeItem[] = [];
+  for (const chunk of chunks) {
+    const vector = await generateEmbedding(chunk.text);
+    items.push({
+      id: crypto.randomUUID(),
+      content: chunk.text,
+      metadata: {
+        source: pageUrl,
+        filename: pageTitle,
+        type: 'notion',
+        chunkIndex: chunk.index,
+        totalChunks: chunks.length,
+        dateAdded: new Date().toISOString()
+      },
+      vector
+    });
+  }
+
+  // Upsert in batches (respect Qdrant Cloud limits)
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = items.slice(i, i + BATCH_SIZE);
+    await upsertVectors(knowledgeSettings.collectionName, batch);
+  }
+
+  return { chunksCount: items.length };
+}
+
+// Import a specific Notion page by URL or ID
+ipcMain.handle('notion-import-page', async (_event, urlOrId: string, includeSubpages: boolean) => {
+  try {
+    if (!notionSettings.notionToken) {
+      return { success: false, error: 'No Notion token configured' };
+    }
+
+    // Initialize clients
+    initNotionClient(notionSettings.notionToken);
+    initQdrantClient(knowledgeSettings);
+    await ensureCollection(knowledgeSettings.collectionName);
+
+    // Extract page ID and fetch metadata
+    const pageId = extractPageIdFromUrl(urlOrId);
+    console.log(`[Notion] Importing page: ${pageId}`);
+
+    const pageMeta = await fetchPageMeta(pageId);
+    let totalChunks = 0;
+    const importedPages: TrackedNotionPage[] = [];
+
+    // Sync the main page
+    const result = await syncSinglePage(pageMeta.id, pageMeta.url, pageMeta.title);
+    totalChunks += result.chunksCount;
+
+    // Track the main page
+    const trackedPage: TrackedNotionPage = {
+      id: pageMeta.id,
+      url: pageMeta.url,
+      title: pageMeta.title,
+      lastSynced: new Date().toISOString(),
+      lastEditedTime: pageMeta.lastEditedTime,
+      includeSubpages
+    };
+    importedPages.push(trackedPage);
+
+    // Import subpages if requested
+    if (includeSubpages) {
+      await new Promise(r => setTimeout(r, 350)); // Rate limit
+      const childPages = await fetchChildPages(pageId);
+
+      for (const child of childPages) {
+        await new Promise(r => setTimeout(r, 350)); // Rate limit
+        const childResult = await syncSinglePage(child.id, child.url, child.title);
+        totalChunks += childResult.chunksCount;
+
+        // Track each subpage
+        importedPages.push({
+          id: child.id,
+          url: child.url,
+          title: child.title,
+          lastSynced: new Date().toISOString(),
+          lastEditedTime: child.lastEditedTime,
+          includeSubpages: false // Subpages don't recurse further
+        });
+      }
+    }
+
+    // Update tracked pages in settings (merge with existing, replace duplicates)
+    const existingTracked = notionSettings.trackedPages || [];
+    const existingIds = new Set(existingTracked.map(p => p.id));
+    const newPages = importedPages.filter(p => !existingIds.has(p.id));
+    const updatedExisting = existingTracked.map(p => {
+      const updated = importedPages.find(ip => ip.id === p.id);
+      return updated || p;
+    });
+    notionSettings.trackedPages = [...updatedExisting, ...newPages];
+    store.set('notionSettings', notionSettings as NotionSettingsStore);
+
+    console.log(`[Notion] Import complete: ${importedPages.length} pages, ${totalChunks} chunks`);
+
+    return {
+      success: true,
+      pagesCount: importedPages.length,
+      chunksCount: totalChunks,
+      pages: importedPages
+    };
+
+  } catch (error: any) {
+    console.error('[Notion] Import failed:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get list of tracked pages
+ipcMain.handle('notion-get-tracked-pages', async () => {
+  return notionSettings.trackedPages || [];
+});
+
+// Remove a tracked page (also deletes from Qdrant)
+ipcMain.handle('notion-remove-tracked-page', async (_event, pageId: string) => {
+  try {
+    const trackedPages = notionSettings.trackedPages || [];
+    const page = trackedPages.find(p => p.id === pageId);
+
+    if (!page) {
+      return { success: false, error: 'Page not found in tracked pages' };
+    }
+
+    // Delete chunks from Qdrant
+    initQdrantClient(knowledgeSettings);
+    await deleteBySource(knowledgeSettings.collectionName, page.url);
+    console.log(`[Notion] Deleted chunks for: ${page.title}`);
+
+    // Remove from tracked list
+    notionSettings.trackedPages = trackedPages.filter(p => p.id !== pageId);
+    store.set('notionSettings', notionSettings as NotionSettingsStore);
+
+    return { success: true, title: page.title };
+
+  } catch (error: any) {
+    console.error('[Notion] Remove failed:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// Check tracked pages for updates
+ipcMain.handle('notion-check-updates', async () => {
+  try {
+    if (!notionSettings.notionToken) {
+      return { success: false, error: 'No token configured' };
+    }
+
+    initNotionClient(notionSettings.notionToken);
+    const trackedPages = notionSettings.trackedPages || [];
+    const pagesWithUpdates: Array<{ id: string; title: string; lastEditedTime: string }> = [];
+
+    for (const page of trackedPages) {
+      await new Promise(r => setTimeout(r, 350)); // Rate limit
+      try {
+        const meta = await fetchPageMeta(page.id);
+        // Compare timestamps: if Notion's lastEditedTime > our stored time, update available
+        if (new Date(meta.lastEditedTime) > new Date(page.lastEditedTime)) {
+          pagesWithUpdates.push({
+            id: page.id,
+            title: page.title,
+            lastEditedTime: meta.lastEditedTime
+          });
+        }
+      } catch (err: any) {
+        console.warn(`[Notion] Could not check page ${page.id}:`, err.message);
+      }
+    }
+
+    console.log(`[Notion] ${pagesWithUpdates.length}/${trackedPages.length} pages have updates`);
+    return { success: true, updates: pagesWithUpdates };
+
+  } catch (error: any) {
+    console.error('[Notion] Check updates failed:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// Re-sync a single tracked page
+ipcMain.handle('notion-sync-tracked-page', async (_event, pageId: string) => {
+  try {
+    if (!notionSettings.notionToken) {
+      return { success: false, error: 'No token configured' };
+    }
+
+    const trackedPages = notionSettings.trackedPages || [];
+    const pageIndex = trackedPages.findIndex(p => p.id === pageId);
+
+    if (pageIndex === -1) {
+      return { success: false, error: 'Page not found in tracked pages' };
+    }
+
+    // Initialize clients
+    initNotionClient(notionSettings.notionToken);
+    initQdrantClient(knowledgeSettings);
+    await ensureCollection(knowledgeSettings.collectionName);
+
+    // Fetch fresh metadata
+    const meta = await fetchPageMeta(pageId);
+    const result = await syncSinglePage(meta.id, meta.url, meta.title);
+
+    // Update tracked page info
+    trackedPages[pageIndex] = {
+      ...trackedPages[pageIndex],
+      title: meta.title,
+      lastSynced: new Date().toISOString(),
+      lastEditedTime: meta.lastEditedTime
+    };
+    notionSettings.trackedPages = trackedPages;
+    store.set('notionSettings', notionSettings as NotionSettingsStore);
+
+    console.log(`[Notion] Re-synced: ${meta.title} (${result.chunksCount} chunks)`);
+
+    return {
+      success: true,
+      chunksCount: result.chunksCount,
+      page: trackedPages[pageIndex]
+    };
+
+  } catch (error: any) {
+    console.error('[Notion] Re-sync failed:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
 // Handle deep link on Windows (single instance)
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -987,6 +1548,72 @@ app.whenReady().then(() => {
 
   // Register spotlight shortcut from settings
   registerSpotlightShortcut();
+
+  // Auto-sync Notion on startup if configured
+  const notionStored = store.get('notionSettings') as NotionSettingsStore | undefined;
+  if (notionStored?.notionToken && notionStored?.syncOnStart) {
+    console.log('[Notion] Auto-sync enabled, starting background sync...');
+    // Run sync in background (don't await, don't block startup)
+    (async () => {
+      try {
+        notionSettings = { ...DEFAULT_NOTION_SETTINGS, ...notionStored };
+        initNotionClient(notionSettings.notionToken!);
+
+        // Also init Qdrant
+        const qdrantStored = store.get('knowledgeSettings') as KnowledgeSettingsStore | undefined;
+        knowledgeSettings = { ...DEFAULT_KNOWLEDGE_SETTINGS, ...qdrantStored };
+        initQdrantClient(knowledgeSettings);
+
+        // Trigger sync (reuse the IPC handler logic would be complex, so inline simplified version)
+        await ensureCollection(knowledgeSettings.collectionName);
+        const pages = await listNotionPages();
+        console.log(`[Notion] Auto-sync: Found ${pages.length} pages`);
+
+        for (const page of pages) {
+          try {
+            const content = await fetchPageContent(page.id);
+            if (!content.trim()) continue;
+
+            await deleteBySource(knowledgeSettings.collectionName, page.url);
+            const chunks = chunkText(content);
+
+            const items: KnowledgeItem[] = [];
+            for (const chunk of chunks) {
+              const vector = await generateEmbedding(chunk.text);
+              items.push({
+                id: crypto.randomUUID(),
+                content: chunk.text,
+                metadata: {
+                  source: page.url,
+                  filename: page.title,
+                  type: 'notion',
+                  chunkIndex: chunk.index,
+                  totalChunks: chunks.length,
+                  dateAdded: new Date().toISOString()
+                },
+                vector
+              });
+            }
+
+            const BATCH_SIZE = 100;
+            for (let i = 0; i < items.length; i += BATCH_SIZE) {
+              await upsertVectors(knowledgeSettings.collectionName, items.slice(i, i + BATCH_SIZE));
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 350));
+          } catch (e) {
+            console.error(`[Notion] Auto-sync error on ${page.title}:`, e);
+          }
+        }
+
+        notionSettings.lastSync = new Date().toISOString();
+        store.set('notionSettings', notionSettings as NotionSettingsStore);
+        console.log('[Notion] Auto-sync complete');
+      } catch (err) {
+        console.error('[Notion] Auto-sync failed:', err);
+      }
+    })();
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

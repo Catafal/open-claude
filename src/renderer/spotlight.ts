@@ -38,6 +38,7 @@ let stepIndex = 0;
 let steps: StepData[] = [];
 let currentThinkingStep: HTMLElement | null = null;
 let currentToolStep: HTMLElement | null = null;
+let currentRagStep: HTMLElement | null = null; // RAG knowledge retrieval step
 let hasHistory = false;
 
 // Constants
@@ -241,6 +242,7 @@ async function sendMessage() {
   steps = [];
   currentThinkingStep = null;
   currentToolStep = null;
+  currentRagStep = null;
 
   updateWindowSize();
 
@@ -419,6 +421,37 @@ claude.onSpotlightToolResult((data: any) => {
     }
     currentToolStep = null;
     updateWindowSize();
+  }
+});
+
+// RAG status listener (knowledge retrieval)
+claude.onSpotlightRag?.((data: { status: string; message: string }) => {
+  if (data.status === 'agent_thinking' || data.status === 'searching') {
+    // Create RAG step at the beginning
+    currentRagStep = createStepItem('rag', data.message || 'Searching knowledge...', true);
+    // Insert at beginning of steps container
+    if (currentStepsContainer && currentStepsContainer.firstChild) {
+      currentStepsContainer.insertBefore(currentRagStep, currentStepsContainer.firstChild);
+    } else {
+      currentStepsContainer?.appendChild(currentRagStep);
+    }
+    steps.unshift({ type: 'rag', el: currentRagStep });
+    updateWindowSize();
+  } else if (data.status === 'complete') {
+    // Mark RAG complete with result message
+    if (currentRagStep) {
+      markStepComplete(currentRagStep, data.message);
+      currentRagStep = null;
+      updateWindowSize();
+    }
+  } else if (data.status === 'skipped' || data.status === 'error') {
+    // Remove RAG step if skipped or errored
+    if (currentRagStep) {
+      currentRagStep.remove();
+      steps = steps.filter(s => s.type !== 'rag');
+      currentRagStep = null;
+      updateWindowSize();
+    }
   }
 });
 

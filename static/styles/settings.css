@@ -203,6 +203,49 @@ body {
   box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
 }
 
+/* Vertical layout for textarea settings */
+.setting-item-vertical {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.setting-item-vertical .setting-info {
+  width: 100%;
+}
+
+/* Textarea for system prompt */
+.setting-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #1a1a1a;
+  resize: vertical;
+  transition: all 0.15s;
+}
+
+.setting-textarea:hover {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.setting-textarea:focus {
+  outline: none;
+  background: rgba(204, 120, 92, 0.08);
+  border-color: #CC785C;
+  box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+}
+
+.setting-textarea::placeholder {
+  color: rgba(0, 0, 0, 0.35);
+}
+
 /* About section */
 .about-info {
   display: flex;
@@ -298,5 +341,24 @@ body {
 
   .about-value {
     color: #f0f0f0;
+  }
+
+  .setting-textarea {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #f0f0f0;
+  }
+
+  .setting-textarea:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .setting-textarea:focus {
+    background: rgba(204, 120, 92, 0.15);
+  }
+
+  .setting-textarea::placeholder {
+    color: rgba(255, 255, 255, 0.35);
   }
 }

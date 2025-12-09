@@ -1974,11 +1974,233 @@
       .tool-output.error { background: rgba(255, 69, 58, 0.15); }
       .citation-link { color: #E8C4A0; }
       .citation-num { color: #E8C4A0; }
+
+      /* Settings view dark mode */
+      .settings-view-header { border-bottom-color: rgba(255, 255, 255, 0.06); }
+      .settings-view-header h1 { color: #f0f0f0 !important; }
+      .settings-view-section {
+        background: rgba(40, 40, 40, 0.8) !important;
+        border-color: rgba(255, 255, 255, 0.1) !important;
+      }
+      .settings-view-section h2 { color: rgba(255, 255, 255, 0.5) !important; }
+      .settings-view-item { border-bottom-color: rgba(255, 255, 255, 0.06); }
+      .settings-view-info label { color: #f0f0f0 !important; }
+      .settings-view-description { color: rgba(255, 255, 255, 0.5) !important; }
+      .keybind-input {
+        background: rgba(255, 255, 255, 0.08) !important;
+        border-color: rgba(255, 255, 255, 0.1) !important;
+      }
+      .keybind-input:hover { background: rgba(255, 255, 255, 0.12) !important; border-color: rgba(255, 255, 255, 0.15) !important; }
+      .keybind-input:focus { background: rgba(204, 120, 92, 0.15) !important; }
+      .keybind-display { color: #f0f0f0 !important; }
+      .keybind-hint { color: rgba(255, 255, 255, 0.4) !important; }
+      .settings-toggle-slider { background: rgba(255, 255, 255, 0.2); }
+      .settings-toggle-slider:before { background: #f0f0f0; }
+      .settings-view-textarea {
+        background: rgba(255, 255, 255, 0.08) !important;
+        border-color: rgba(255, 255, 255, 0.1) !important;
+        color: #f0f0f0 !important;
+      }
+      .settings-view-textarea:hover { background: rgba(255, 255, 255, 0.12) !important; border-color: rgba(255, 255, 255, 0.15) !important; }
+      .settings-view-textarea:focus { background: rgba(204, 120, 92, 0.15) !important; }
+      .settings-view-textarea::placeholder { color: rgba(255, 255, 255, 0.35) !important; }
+      .settings-about-label { color: rgba(255, 255, 255, 0.6) !important; }
+      .settings-about-value { color: #f0f0f0 !important; }
     }
 
     /* Knowledge view show/hide */
     .knowledge-container { display: none; }
     .knowledge-container.active { display: flex; }
+
+    /* Settings view show/hide */
+    .settings-view-container { display: none; flex-direction: column; height: 100vh; }
+    .settings-view-container.active { display: flex; }
+
+    .settings-view-header {
+      padding: 20px 24px;
+      padding-top: 52px;
+      background: transparent;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      -webkit-app-region: drag;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .settings-view-header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+    .settings-back-btn {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: inherit;
+      opacity: 0.5;
+      padding: 0 12px 0 0;
+      transition: opacity 0.15s;
+      -webkit-app-region: no-drag;
+    }
+    .settings-back-btn:hover { opacity: 1; }
+
+    .settings-view-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .settings-view-content::-webkit-scrollbar { display: none; }
+
+    .settings-view-section {
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    .settings-view-section h2 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: rgba(0, 0, 0, 0.5);
+      margin-bottom: 16px;
+    }
+    .settings-view-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    .settings-view-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .settings-view-item:first-of-type { padding-top: 0; }
+    .settings-view-item-vertical {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .settings-view-item-vertical .settings-view-info { width: 100%; }
+
+    .settings-view-info { flex: 1; }
+    .settings-view-info label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: #1a1a1a;
+      margin-bottom: 2px;
+    }
+    .settings-view-description {
+      font-size: 12px;
+      color: rgba(0, 0, 0, 0.5);
+    }
+
+    /* Keybind input */
+    .keybind-input {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      padding: 8px 14px;
+      background: rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      min-width: 160px;
+    }
+    .keybind-input:hover { background: rgba(0, 0, 0, 0.06); border-color: rgba(0, 0, 0, 0.12); }
+    .keybind-input:focus {
+      outline: none;
+      background: rgba(204, 120, 92, 0.08);
+      border-color: #CC785C;
+      box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+    }
+    .keybind-input.recording {
+      background: rgba(204, 120, 92, 0.1);
+      border-color: #CC785C;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes keybindPulse {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15); }
+      50% { box-shadow: 0 0 0 5px rgba(204, 120, 92, 0.1); }
+    }
+    .keybind-display {
+      font-size: 13px;
+      font-weight: 500;
+      color: #1a1a1a;
+      font-family: 'SF Mono', Menlo, monospace;
+    }
+    .keybind-hint {
+      font-size: 10px;
+      color: rgba(0, 0, 0, 0.4);
+      margin-top: 2px;
+    }
+    .keybind-input.recording .keybind-hint { color: #CC785C; }
+    .keybind-input.recording .keybind-display { color: #CC785C; }
+
+    /* Settings toggle switch */
+    .settings-toggle {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 26px;
+    }
+    .settings-toggle input { opacity: 0; width: 0; height: 0; }
+    .settings-toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.15);
+      transition: 0.3s;
+      border-radius: 26px;
+    }
+    .settings-toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 2px;
+      bottom: 2px;
+      background: white;
+      transition: 0.3s;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+    .settings-toggle input:checked + .settings-toggle-slider { background: #CC785C; }
+    .settings-toggle input:checked + .settings-toggle-slider:before { transform: translateX(18px); }
+    .settings-toggle input:focus + .settings-toggle-slider { box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15); }
+
+    /* Settings textarea */
+    .settings-view-textarea {
+      width: 100%;
+      min-height: 80px;
+      padding: 10px 12px;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.04);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+      color: #1a1a1a;
+      resize: vertical;
+      transition: all 0.15s;
+    }
+    .settings-view-textarea:hover { background: rgba(0, 0, 0, 0.06); border-color: rgba(0, 0, 0, 0.12); }
+    .settings-view-textarea:focus {
+      outline: none;
+      background: rgba(204, 120, 92, 0.08);
+      border-color: #CC785C;
+      box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+    }
+    .settings-view-textarea::placeholder { color: rgba(0, 0, 0, 0.35); }
+
+    /* Settings about section */
+    .settings-about-info { display: flex; flex-direction: column; gap: 8px; }
+    .settings-about-row { display: flex; justify-content: space-between; align-items: center; }
+    .settings-about-label { font-size: 14px; color: rgba(0, 0, 0, 0.6); }
+    .settings-about-value { font-size: 14px; color: #1a1a1a; font-family: 'SF Mono', Menlo, monospace; }
 
     /* Knowledge back button */
     .knowledge-back-btn {
@@ -2075,6 +2297,13 @@
         </svg>
         Knowledge
       </button>
+      <button class="home-footer-btn" id="home-settings-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Settings
+      </button>
       <button class="home-signout" id="logout-btn">Sign Out</button>
     </div>
   </div>
@@ -2108,23 +2337,105 @@
 
     <!-- Settings Panel (hidden by default) -->
     <div id="settings-panel" class="settings-panel">
-      <div class="setting-item">
-        <div class="setting-info">
-          <label>Qdrant URL</label>
-          <span class="setting-description">Local Docker or Qdrant Cloud URL</span>
+      <!-- Qdrant Section -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="qdrant">
+          <span class="section-icon">🔷</span>
+          <span class="section-title">Qdrant Vector DB</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="qdrant-section">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>URL</label>
+              <span class="setting-description">Local Docker or Cloud</span>
+            </div>
+            <input type="text" id="qdrant-url" class="text-input" placeholder="http://localhost:6333">
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>API Key</label>
+              <span class="setting-description">Optional - for Cloud</span>
+            </div>
+            <input type="password" id="qdrant-key" class="text-input" placeholder="Enter API key">
+          </div>
+          <div class="setting-item setting-actions">
+            <button id="test-connection" class="btn btn-secondary">Test Connection</button>
+            <span id="connection-status" class="status-text"></span>
+          </div>
         </div>
-        <input type="text" id="qdrant-url" class="text-input" placeholder="http://localhost:6333">
       </div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <label>API Key</label>
-          <span class="setting-description">Optional - for Qdrant Cloud</span>
+
+      <!-- Notion Section -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="notion">
+          <span class="section-icon">📝</span>
+          <span class="section-title">Notion</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="notion-section">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Token</label>
+              <span class="setting-description">From <a href="https://notion.so/my-integrations" target="_blank">my-integrations</a></span>
+            </div>
+            <input type="password" id="notion-token" class="text-input" placeholder="secret_...">
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Auto-sync</label>
+              <span class="setting-description">Sync on app start</span>
+            </div>
+            <input type="checkbox" id="notion-auto-sync" class="toggle-switch" checked>
+          </div>
+          <div class="setting-item setting-actions">
+            <button id="notion-test" class="btn btn-secondary">Test</button>
+            <button id="notion-sync" class="btn btn-primary">Sync Now</button>
+            <span id="notion-status" class="status-text"></span>
+          </div>
+          <div id="notion-last-sync" class="last-sync-info"></div>
         </div>
-        <input type="password" id="qdrant-key" class="text-input" placeholder="Enter API key">
       </div>
-      <div class="setting-item">
-        <button id="test-connection" class="btn btn-secondary">Test Connection</button>
-        <span id="connection-status" class="status-text"></span>
+
+      <!-- RAG Agent Section -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="rag">
+          <span class="section-icon">🧠</span>
+          <span class="section-title">RAG Agent</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="rag-section">
+          <div class="setting-item setting-item-row">
+            <div class="setting-info">
+              <label>Enable RAG</label>
+              <span class="setting-description">AI-powered knowledge retrieval</span>
+            </div>
+            <input type="checkbox" id="rag-enabled" class="toggle-switch" checked>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Ollama URL</label>
+              <span class="setting-description">Local Ollama server</span>
+            </div>
+            <input type="text" id="rag-ollama-url" class="text-input" placeholder="http://localhost:11434">
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Model</label>
+              <span class="setting-description">Small model for decisions</span>
+            </div>
+            <select id="rag-model" class="text-input">
+              <option value="ministral-3:3b" selected>ministral-3:3b (Recommended)</option>
+              <option value="qwen2.5:3b">qwen2.5:3b</option>
+              <option value="llama3.2:3b">llama3.2:3b</option>
+              <option value="phi3:mini">phi3:mini</option>
+            </select>
+          </div>
+          <div class="setting-item setting-actions">
+            <button id="rag-test-connection" class="btn btn-secondary">Test Connection</button>
+            <span id="rag-connection-status" class="status-text"></span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2132,6 +2443,42 @@
     <div id="add-menu" class="add-menu">
       <button id="add-menu-file" class="add-menu-item">Add Files</button>
       <button id="add-menu-url" class="add-menu-item">Add URL</button>
+      <button id="add-menu-notion" class="add-menu-item">Import Notion</button>
+    </div>
+
+    <!-- Import Notion Modal -->
+    <div id="import-modal" class="import-modal">
+      <div class="import-modal-content">
+        <div class="import-modal-header">
+          <span class="import-modal-title">Import Notion Page</span>
+          <button id="import-modal-close" class="import-modal-close">&times;</button>
+        </div>
+        <div class="import-modal-body">
+          <!-- URL Input -->
+          <div class="import-field">
+            <label>Page URL</label>
+            <input type="text" id="notion-page-url" class="text-input" placeholder="https://notion.so/...">
+          </div>
+          <!-- Include Subpages -->
+          <div class="import-field import-field-row">
+            <label>Include Subpages</label>
+            <input type="checkbox" id="notion-include-subpages" class="toggle-switch">
+          </div>
+          <!-- Import Button -->
+          <div class="import-actions">
+            <button id="notion-import-btn" class="btn btn-primary">Import</button>
+            <span id="import-status" class="status-text"></span>
+          </div>
+          <!-- Tracked Pages -->
+          <div class="tracked-pages-header">
+            <span>Tracked Pages</span>
+            <button id="check-updates-btn" class="btn btn-secondary btn-small">Check Updates</button>
+          </div>
+          <div id="tracked-pages-list" class="tracked-pages-list">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Footer (matches main window style) -->
@@ -2162,6 +2509,57 @@
           <button id="preview-modal-close" class="preview-modal-close">×</button>
         </div>
         <div id="preview-modal-body" class="preview-modal-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings View -->
+  <div id="settings" class="settings-view-container">
+    <div class="settings-view-header">
+      <button id="settings-back-btn" class="settings-back-btn">←</button>
+      <h1>Settings</h1>
+    </div>
+    <div class="settings-view-content">
+      <!-- Spotlight Section -->
+      <div class="settings-view-section">
+        <h2>Spotlight</h2>
+        <div class="settings-view-item">
+          <div class="settings-view-info">
+            <label>Keyboard Shortcut</label>
+            <span class="settings-view-description">Global shortcut to open spotlight</span>
+          </div>
+          <div class="keybind-input" id="keybind-input" tabindex="0">
+            <span class="keybind-display" id="keybind-display">⌘ + Shift + C</span>
+            <span class="keybind-hint">Click to change</span>
+          </div>
+        </div>
+        <div class="settings-view-item">
+          <div class="settings-view-info">
+            <label>Persist History</label>
+            <span class="settings-view-description">Keep spotlight chat history after closing</span>
+          </div>
+          <label class="settings-toggle">
+            <input type="checkbox" id="persist-history">
+            <span class="settings-toggle-slider"></span>
+          </label>
+        </div>
+        <div class="settings-view-item settings-view-item-vertical">
+          <div class="settings-view-info">
+            <label>System Prompt</label>
+            <span class="settings-view-description">Instructions always prepended to your spotlight messages</span>
+          </div>
+          <textarea id="spotlight-system-prompt" class="settings-view-textarea" placeholder="e.g., search for real citations that verify your response..."></textarea>
+        </div>
+      </div>
+      <!-- About Section -->
+      <div class="settings-view-section">
+        <h2>About</h2>
+        <div class="settings-about-info">
+          <div class="settings-about-row">
+            <span class="settings-about-label">Version</span>
+            <span class="settings-about-value" id="app-version">1.0.0</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>

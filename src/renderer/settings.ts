@@ -5,12 +5,14 @@ const claude = (window as any).claude;
 interface Settings {
   spotlightKeybind: string;
   spotlightPersistHistory: boolean;
+  spotlightSystemPrompt: string;
 }
 
 // DOM Elements
 const keybindInput = document.getElementById('keybind-input') as HTMLElement;
 const keybindDisplay = document.getElementById('keybind-display') as HTMLElement;
 const persistHistoryCheckbox = document.getElementById('persist-history') as HTMLInputElement;
+const systemPromptTextarea = document.getElementById('spotlight-system-prompt') as HTMLTextAreaElement;
 
 let isRecordingKeybind = false;
 let currentSettings: Settings | null = null;
@@ -106,6 +108,7 @@ async function loadSettings() {
   if (currentSettings) {
     keybindDisplay.textContent = formatKeybind(currentSettings.spotlightKeybind);
     persistHistoryCheckbox.checked = currentSettings.spotlightPersistHistory;
+    systemPromptTextarea.value = currentSettings.spotlightSystemPrompt || '';
   }
 }
 
@@ -190,6 +193,12 @@ keybindInput.addEventListener('blur', () => {
 // Persist history toggle
 persistHistoryCheckbox.addEventListener('change', () => {
   savePersistHistory(persistHistoryCheckbox.checked);
+});
+
+// System prompt textarea - save on blur (when user clicks away)
+systemPromptTextarea.addEventListener('blur', async () => {
+  if (!currentSettings) return;
+  currentSettings = await claude.saveSettings({ spotlightSystemPrompt: systemPromptTextarea.value });
 });
 
 // Load settings on page load

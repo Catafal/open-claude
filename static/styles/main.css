@@ -1122,6 +1122,10 @@
       background: #5856D6;
     }
 
+    .step-item.rag .step-dot {
+      background: #34C759;
+    }
+
     .step-line-bottom {
       width: 1px;
       flex: 1;
@@ -1192,6 +1196,20 @@
 
     .step-item.tool .step-label {
       color: rgba(0, 0, 0, 0.55);
+    }
+
+    .step-item.rag .step-label {
+      color: rgba(0, 0, 0, 0.55);
+    }
+
+    .step-item.rag .step-spinner {
+      border-color: rgba(52, 199, 89, 0.2);
+      border-top-color: #34C759;
+    }
+
+    .step-item.rag .step-check {
+      color: #34C759;
+      font-size: 12px;
     }
 
     .step-meta {
@@ -1641,6 +1659,10 @@
       .step-label { color: #fff !important; }
       .step-item.thinking .step-label { color: #fff !important; }
       .step-item.tool .step-label { color: #fff !important; }
+      .step-item.rag .step-label { color: #fff !important; }
+      .step-item.rag .step-dot { background: #30D158; }
+      .step-item.rag .step-spinner { border-color: rgba(48, 209, 88, 0.2); border-top-color: #30D158; }
+      .step-item.rag .step-check { color: #30D158; }
       .step-meta { color: rgba(255, 255, 255, 0.6); }
       .step-chevron { color: rgba(255, 255, 255, 0.6); }
       .step-text { color: #fff !important; }

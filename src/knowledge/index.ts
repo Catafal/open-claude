@@ -31,3 +31,15 @@ export { chunkText } from './chunker';
 
 // File/URL parsing
 export { parseFile, parseUrl } from './ingestion';
+
+// Notion client operations
+export {
+  initNotionClient,
+  getNotionClient,
+  testNotionConnection,
+  listNotionPages,
+  fetchPageContent,
+  extractPageIdFromUrl,
+  fetchPageMeta,
+  fetchChildPages
+} from './notion';
