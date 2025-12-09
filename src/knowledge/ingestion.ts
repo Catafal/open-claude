@@ -2,12 +2,29 @@
  * Ingestion Pipeline
  *
  * Parses different file types and URLs to extract text content.
- * Supports: .txt, .md, .pdf, web URLs
+ * Supports: .txt, .md, .pdf, web URLs (via Firecrawl)
  */
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import FirecrawlApp from '@mendable/firecrawl-js';
 import type { ParsedDocument, KnowledgeMetadata } from './types';
+
+// Firecrawl client - lazy initialized when API key is provided
+let firecrawlClient: FirecrawlApp | null = null;
+
+/**
+ * Initialize the Firecrawl client with API key.
+ * Called when knowledge settings are loaded/saved.
+ */
+export function initFirecrawl(apiKey: string): void {
+  if (apiKey) {
+    firecrawlClient = new FirecrawlApp({ apiKey });
+    console.log('[Firecrawl] Client initialized');
+  } else {
+    firecrawlClient = null;
+  }
+}
 
 /**
  * Parse a local file and extract text content.
@@ -62,56 +79,33 @@ async function parsePdf(filePath: string): Promise<string> {
 }
 
 /**
- * Fetch and parse a web URL.
- * Extracts main content, removing navigation, ads, etc.
+ * Fetch and parse a web URL using Firecrawl.
+ * Returns clean markdown content, handles JS rendering.
  */
 export async function parseUrl(url: string): Promise<ParsedDocument> {
-  // Fetch the page
-  const response = await fetch(url, {
-    headers: {
-      // Basic user agent to avoid blocks
-      'User-Agent': 'Mozilla/5.0 (compatible; KnowledgeBot/1.0)'
-    }
+  if (!firecrawlClient) {
+    throw new Error('Firecrawl API key not configured. Add it in Knowledge settings.');
+  }
+
+  console.log(`[Firecrawl] Scraping: ${url}`);
+
+  // Firecrawl scrape returns Document with markdown and metadata
+  const result = await firecrawlClient.scrape(url, {
+    formats: ['markdown']
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+  // Extract title from metadata or fallback to URL
+  const title = result.metadata?.title || extractTitleFromUrl(url);
+  const content = result.markdown || '';
+
+  if (!content) {
+    throw new Error('No content extracted from URL');
   }
 
-  const html = await response.text();
-
-  // Dynamic import cheerio
-  const cheerio = await import('cheerio');
-  const $ = cheerio.load(html);
-
-  // Remove non-content elements
-  $('script, style, nav, footer, header, aside, noscript, iframe').remove();
-  $('[role="navigation"], [role="banner"], [role="complementary"]').remove();
-  $('.nav, .navbar, .menu, .sidebar, .footer, .header, .ads, .advertisement').remove();
-
-  // Extract title
-  const title = $('title').text().trim() || extractTitleFromUrl(url);
-
-  // Try to find main content in order of preference
-  let text = '';
-
-  // Try article or main content first
-  const mainContent = $('article, main, [role="main"], .content, .post, .article').first();
-  if (mainContent.length) {
-    text = mainContent.text();
-  } else {
-    // Fall back to body
-    text = $('body').text();
-  }
-
-  // Clean up whitespace
-  text = text
-    .replace(/\s+/g, ' ')    // Collapse whitespace
-    .replace(/\n\s*\n/g, '\n\n')  // Normalize paragraph breaks
-    .trim();
+  console.log(`[Firecrawl] Extracted ${content.length} chars from "${title}"`);
 
   return {
-    content: text,
+    content,
     metadata: {
       source: url,
       filename: title,

@@ -2335,110 +2335,6 @@
     <!-- Status -->
     <div id="ingest-status" class="ingest-status"></div>
 
-    <!-- Settings Panel (hidden by default) -->
-    <div id="settings-panel" class="settings-panel">
-      <!-- Qdrant Section -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="qdrant">
-          <span class="section-icon">🔷</span>
-          <span class="section-title">Qdrant Vector DB</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="qdrant-section">
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>URL</label>
-              <span class="setting-description">Local Docker or Cloud</span>
-            </div>
-            <input type="text" id="qdrant-url" class="text-input" placeholder="http://localhost:6333">
-          </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>API Key</label>
-              <span class="setting-description">Optional - for Cloud</span>
-            </div>
-            <input type="password" id="qdrant-key" class="text-input" placeholder="Enter API key">
-          </div>
-          <div class="setting-item setting-actions">
-            <button id="test-connection" class="btn btn-secondary">Test Connection</button>
-            <span id="connection-status" class="status-text"></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Notion Section -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="notion">
-          <span class="section-icon">📝</span>
-          <span class="section-title">Notion</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="notion-section">
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Token</label>
-              <span class="setting-description">From <a href="https://notion.so/my-integrations" target="_blank">my-integrations</a></span>
-            </div>
-            <input type="password" id="notion-token" class="text-input" placeholder="secret_...">
-          </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Auto-sync</label>
-              <span class="setting-description">Sync on app start</span>
-            </div>
-            <input type="checkbox" id="notion-auto-sync" class="toggle-switch" checked>
-          </div>
-          <div class="setting-item setting-actions">
-            <button id="notion-test" class="btn btn-secondary">Test</button>
-            <button id="notion-sync" class="btn btn-primary">Sync Now</button>
-            <span id="notion-status" class="status-text"></span>
-          </div>
-          <div id="notion-last-sync" class="last-sync-info"></div>
-        </div>
-      </div>
-
-      <!-- RAG Agent Section -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="rag">
-          <span class="section-icon">🧠</span>
-          <span class="section-title">RAG Agent</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="rag-section">
-          <div class="setting-item setting-item-row">
-            <div class="setting-info">
-              <label>Enable RAG</label>
-              <span class="setting-description">AI-powered knowledge retrieval</span>
-            </div>
-            <input type="checkbox" id="rag-enabled" class="toggle-switch" checked>
-          </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Ollama URL</label>
-              <span class="setting-description">Local Ollama server</span>
-            </div>
-            <input type="text" id="rag-ollama-url" class="text-input" placeholder="http://localhost:11434">
-          </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Model</label>
-              <span class="setting-description">Small model for decisions</span>
-            </div>
-            <select id="rag-model" class="text-input">
-              <option value="ministral-3:3b" selected>ministral-3:3b (Recommended)</option>
-              <option value="qwen2.5:3b">qwen2.5:3b</option>
-              <option value="llama3.2:3b">llama3.2:3b</option>
-              <option value="phi3:mini">phi3:mini</option>
-            </select>
-          </div>
-          <div class="setting-item setting-actions">
-            <button id="rag-test-connection" class="btn btn-secondary">Test Connection</button>
-            <span id="rag-connection-status" class="status-text"></span>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Add Menu (popup above Add button) -->
     <div id="add-menu" class="add-menu">
       <button id="add-menu-file" class="add-menu-item">Add Files</button>
@@ -2481,15 +2377,8 @@
       </div>
     </div>
 
-    <!-- Footer (matches main window style) -->
+    <!-- Footer -->
     <div class="knowledge-footer">
-      <button id="toggle-connection" class="knowledge-footer-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-        Settings
-      </button>
       <button id="knowledge-add-btn" class="knowledge-footer-btn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -2500,6 +2389,24 @@
     </div>
 
     <input type="file" id="knowledge-file-input" multiple accept=".txt,.md,.pdf" style="display:none">
+
+    <!-- Add URL Modal -->
+    <div id="url-modal" class="import-modal">
+      <div class="import-modal-content">
+        <div class="import-modal-header">
+          <span class="import-modal-title">Add URL</span>
+          <button id="url-modal-close" class="import-modal-close">&times;</button>
+        </div>
+        <div class="import-modal-body">
+          <div class="import-field">
+            <label>Web Page URL</label>
+            <input type="text" id="url-input" class="text-input" placeholder="https://example.com/page">
+          </div>
+          <button id="url-add-btn" class="btn btn-primary">Add to Knowledge</button>
+          <span id="url-status" class="status-text"></span>
+        </div>
+      </div>
+    </div>
 
     <!-- Preview Modal -->
     <div id="preview-modal" class="preview-modal">
@@ -2513,54 +2420,189 @@
     </div>
   </div>
 
-  <!-- Settings View -->
+  <!-- Settings View (Unified - all settings in one place) -->
   <div id="settings" class="settings-view-container">
     <div class="settings-view-header">
       <button id="settings-back-btn" class="settings-back-btn">←</button>
       <h1>Settings</h1>
     </div>
     <div class="settings-view-content">
-      <!-- Spotlight Section -->
-      <div class="settings-view-section">
-        <h2>Spotlight</h2>
-        <div class="settings-view-item">
-          <div class="settings-view-info">
-            <label>Keyboard Shortcut</label>
-            <span class="settings-view-description">Global shortcut to open spotlight</span>
+
+      <!-- Spotlight Section (collapsible) -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="spotlight">
+          <span class="section-icon">🎯</span>
+          <span class="section-title">Spotlight</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="spotlight-section">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Keyboard Shortcut</label>
+              <span class="setting-description">Global shortcut to open spotlight</span>
+            </div>
+            <div class="keybind-input" id="keybind-input" tabindex="0">
+              <span class="keybind-display" id="keybind-display">⌘ + Shift + C</span>
+              <span class="keybind-hint">Click to change</span>
+            </div>
           </div>
-          <div class="keybind-input" id="keybind-input" tabindex="0">
-            <span class="keybind-display" id="keybind-display">⌘ + Shift + C</span>
-            <span class="keybind-hint">Click to change</span>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Persist History</label>
+              <span class="setting-description">Keep spotlight chat history after closing</span>
+            </div>
+            <label class="settings-toggle">
+              <input type="checkbox" id="persist-history">
+              <span class="settings-toggle-slider"></span>
+            </label>
           </div>
-        </div>
-        <div class="settings-view-item">
-          <div class="settings-view-info">
-            <label>Persist History</label>
-            <span class="settings-view-description">Keep spotlight chat history after closing</span>
-          </div>
-          <label class="settings-toggle">
-            <input type="checkbox" id="persist-history">
-            <span class="settings-toggle-slider"></span>
-          </label>
-        </div>
-        <div class="settings-view-item settings-view-item-vertical">
-          <div class="settings-view-info">
-            <label>System Prompt</label>
-            <span class="settings-view-description">Instructions always prepended to your spotlight messages</span>
-          </div>
-          <textarea id="spotlight-system-prompt" class="settings-view-textarea" placeholder="e.g., search for real citations that verify your response..."></textarea>
-        </div>
-      </div>
-      <!-- About Section -->
-      <div class="settings-view-section">
-        <h2>About</h2>
-        <div class="settings-about-info">
-          <div class="settings-about-row">
-            <span class="settings-about-label">Version</span>
-            <span class="settings-about-value" id="app-version">1.0.0</span>
+          <div class="setting-item setting-item-vertical">
+            <div class="setting-info">
+              <label>System Prompt</label>
+              <span class="setting-description">Instructions prepended to spotlight messages</span>
+            </div>
+            <textarea id="spotlight-system-prompt" class="settings-view-textarea" placeholder="e.g., search for real citations that verify your response..."></textarea>
           </div>
         </div>
       </div>
+
+      <!-- Qdrant Section (collapsible) -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="qdrant">
+          <span class="section-icon">🔷</span>
+          <span class="section-title">Qdrant Vector DB</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="qdrant-section">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>URL</label>
+              <span class="setting-description">Local Docker or Cloud</span>
+            </div>
+            <input type="text" id="qdrant-url" class="text-input" placeholder="http://localhost:6333">
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>API Key</label>
+              <span class="setting-description">Optional - for Cloud</span>
+            </div>
+            <input type="password" id="qdrant-key" class="text-input" placeholder="Enter API key">
+          </div>
+          <div class="setting-item setting-actions">
+            <button id="test-connection" class="btn btn-secondary">Test Connection</button>
+            <span id="connection-status" class="status-text"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Firecrawl Section (collapsible) -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="firecrawl">
+          <span class="section-icon">🔥</span>
+          <span class="section-title">Firecrawl (URL Scraping)</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="firecrawl-section">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>API Key</label>
+              <span class="setting-description">Get key at <a href="https://firecrawl.dev" target="_blank">firecrawl.dev</a></span>
+            </div>
+            <input type="password" id="firecrawl-key" class="text-input" placeholder="fc-...">
+          </div>
+          <p class="setting-hint">Required for adding URLs to knowledge base</p>
+        </div>
+      </div>
+
+      <!-- Notion Section (collapsible) -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="notion">
+          <span class="section-icon">📝</span>
+          <span class="section-title">Notion</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="notion-section">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Token</label>
+              <span class="setting-description">From <a href="https://notion.so/my-integrations" target="_blank">my-integrations</a></span>
+            </div>
+            <input type="password" id="notion-token" class="text-input" placeholder="secret_...">
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Auto-sync</label>
+              <span class="setting-description">Sync on app start</span>
+            </div>
+            <input type="checkbox" id="notion-auto-sync" class="toggle-switch" checked>
+          </div>
+          <div class="setting-item setting-actions">
+            <button id="notion-test" class="btn btn-secondary">Test</button>
+            <button id="notion-sync" class="btn btn-primary">Sync Now</button>
+            <span id="notion-status" class="status-text"></span>
+          </div>
+          <div id="notion-last-sync" class="last-sync-info"></div>
+        </div>
+      </div>
+
+      <!-- RAG Agent Section (collapsible) -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="rag">
+          <span class="section-icon">🧠</span>
+          <span class="section-title">RAG Agent</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="rag-section">
+          <div class="setting-item setting-item-row">
+            <div class="setting-info">
+              <label>Enable RAG</label>
+              <span class="setting-description">AI-powered knowledge retrieval</span>
+            </div>
+            <input type="checkbox" id="rag-enabled" class="toggle-switch" checked>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Ollama URL</label>
+              <span class="setting-description">Local Ollama server</span>
+            </div>
+            <input type="text" id="rag-ollama-url" class="text-input" placeholder="http://localhost:11434">
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Model</label>
+              <span class="setting-description">Small model for decisions</span>
+            </div>
+            <select id="rag-model" class="text-input">
+              <option value="ministral-3:3b" selected>ministral-3:3b (Recommended)</option>
+              <option value="qwen2.5:3b">qwen2.5:3b</option>
+              <option value="llama3.2:3b">llama3.2:3b</option>
+              <option value="phi3:mini">phi3:mini</option>
+            </select>
+          </div>
+          <div class="setting-item setting-actions">
+            <button id="rag-test-connection" class="btn btn-secondary">Test Connection</button>
+            <span id="rag-connection-status" class="status-text"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- About Section (collapsible) -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="about">
+          <span class="section-icon">ℹ️</span>
+          <span class="section-title">About</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="about-section">
+          <div class="settings-about-info">
+            <div class="settings-about-row">
+              <span class="settings-about-label">Version</span>
+              <span class="settings-about-value" id="app-version">1.0.0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 

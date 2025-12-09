@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, globalShortcut, screen, Tray, Menu, nativeImage, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, session, globalShortcut, screen, Tray, Menu, nativeImage, dialog, shell } from 'electron';
 import path from 'path';
 import crypto from 'crypto';
 import { isAuthenticated, getOrgId, makeRequest, streamCompletion, stopResponse, generateTitle, store, BASE_URL, prepareAttachmentPayload } from './api/client';
@@ -16,6 +16,7 @@ import {
   chunkText,
   parseFile,
   parseUrl,
+  initFirecrawl,
   DEFAULT_KNOWLEDGE_SETTINGS,
   DEFAULT_NOTION_SETTINGS,
   initNotionClient,
@@ -37,6 +38,7 @@ import {
   DEFAULT_RAG_SETTINGS,
   type RAGSettings
 } from './rag';
+import { checkForUpdatesAndNotify } from './updater';
 
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
@@ -877,6 +879,13 @@ ipcMain.handle('open-knowledge', async () => {
   }
 });
 
+// Open external URL in default browser
+ipcMain.handle('open-external-url', async (_event, url: string) => {
+  if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+    await shell.openExternal(url);
+  }
+});
+
 // Open file dialog for knowledge files
 ipcMain.handle('knowledge-open-file-dialog', async () => {
   const result = await dialog.showOpenDialog({
@@ -902,6 +911,11 @@ ipcMain.handle('knowledge-get-settings', async () => {
     }
   }
 
+  // Initialize Firecrawl if API key is configured
+  if (knowledgeSettings.firecrawlApiKey) {
+    initFirecrawl(knowledgeSettings.firecrawlApiKey);
+  }
+
   return knowledgeSettings;
 });
 
@@ -909,8 +923,11 @@ ipcMain.handle('knowledge-get-settings', async () => {
 ipcMain.handle('knowledge-save-settings', async (_event, settings: Partial<KnowledgeSettings>) => {
   knowledgeSettings = { ...knowledgeSettings, ...settings };
   store.set('knowledgeSettings', knowledgeSettings);
-  // Reinitialize client with new settings
+  // Reinitialize clients with new settings
   initQdrantClient(knowledgeSettings);
+  if (knowledgeSettings.firecrawlApiKey) {
+    initFirecrawl(knowledgeSettings.firecrawlApiKey);
+  }
   return knowledgeSettings;
 });
 
@@ -1545,6 +1562,9 @@ app.whenReady().then(() => {
 
   createMainWindow();
   createTray();
+
+  // Check for updates on startup (non-blocking)
+  checkForUpdatesAndNotify();
 
   // Register spotlight shortcut from settings
   registerSpotlightShortcut();

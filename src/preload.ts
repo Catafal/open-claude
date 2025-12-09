@@ -150,7 +150,7 @@ contextBridge.exposeInMainWorld('claude', {
   openKnowledge: () => ipcRenderer.invoke('open-knowledge'),
   knowledgeOpenFileDialog: () => ipcRenderer.invoke('knowledge-open-file-dialog'),
   knowledgeGetSettings: () => ipcRenderer.invoke('knowledge-get-settings'),
-  knowledgeSaveSettings: (settings: { qdrantUrl?: string; qdrantApiKey?: string; collectionName?: string }) =>
+  knowledgeSaveSettings: (settings: { qdrantUrl?: string; qdrantApiKey?: string; collectionName?: string; firecrawlApiKey?: string }) =>
     ipcRenderer.invoke('knowledge-save-settings', settings),
   knowledgeTestConnection: () => ipcRenderer.invoke('knowledge-test-connection'),
   knowledgeIngestFile: (filePath: string) => ipcRenderer.invoke('knowledge-ingest-file', filePath),
@@ -159,6 +159,9 @@ contextBridge.exposeInMainWorld('claude', {
   knowledgeList: () => ipcRenderer.invoke('knowledge-list'),
   knowledgeDelete: (ids: string[]) => ipcRenderer.invoke('knowledge-delete', ids),
   knowledgeDeleteBySource: (source: string) => ipcRenderer.invoke('knowledge-delete-by-source', source),
+
+  // Open external URL in browser (for URL knowledge cards)
+  openExternalUrl: (url: string) => ipcRenderer.invoke('open-external-url', url),
 
   // Notion Integration functions
   notionGetSettings: () => ipcRenderer.invoke('notion-get-settings'),

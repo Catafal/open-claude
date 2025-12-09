@@ -29,8 +29,8 @@ export {
 // Text chunking
 export { chunkText } from './chunker';
 
-// File/URL parsing
-export { parseFile, parseUrl } from './ingestion';
+// File/URL parsing + Firecrawl client
+export { parseFile, parseUrl, initFirecrawl } from './ingestion';
 
 // Notion client operations
 export {

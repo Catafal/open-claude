@@ -29,14 +29,17 @@ declare global {
       // Knowledge functions
       openKnowledge: () => Promise<void>;
       knowledgeOpenFileDialog: () => Promise<string[]>;
-      knowledgeGetSettings: () => Promise<{ qdrantUrl?: string; qdrantApiKey?: string }>;
-      knowledgeSaveSettings: (settings: { qdrantUrl?: string; qdrantApiKey?: string }) => Promise<void>;
+      knowledgeGetSettings: () => Promise<{ qdrantUrl?: string; qdrantApiKey?: string; firecrawlApiKey?: string }>;
+      knowledgeSaveSettings: (settings: { qdrantUrl?: string; qdrantApiKey?: string; firecrawlApiKey?: string }) => Promise<void>;
       knowledgeTestConnection: () => Promise<{ success: boolean; error?: string }>;
       knowledgeIngestFile: (filePath: string) => Promise<{ success: boolean; chunksIngested?: number; error?: string }>;
       knowledgeIngestUrl: (url: string) => Promise<{ success: boolean; chunksIngested?: number; error?: string }>;
       knowledgeSearch: (query: string, limit?: number) => Promise<KnowledgeSearchResult[]>;
       knowledgeList: () => Promise<KnowledgeItem[]>;
       knowledgeDelete: (ids: string[]) => Promise<void>;
+      knowledgeDeleteBySource: (source: string) => Promise<{ success: boolean; deletedCount?: number; error?: string }>;
+      // Open external URL in browser (for URL knowledge cards)
+      openExternalUrl: (url: string) => Promise<void>;
       // Notion functions
       notionGetSettings: () => Promise<{ notionToken?: string; lastSync?: string; syncOnStart?: boolean }>;
       notionSaveSettings: (settings: { notionToken?: string; syncOnStart?: boolean }) => Promise<void>;
@@ -603,6 +606,44 @@ function initSettingsUI() {
     if (!currentAppSettings) return;
     currentAppSettings = await window.claude.saveSettings({ spotlightSystemPrompt: systemPromptTextarea.value });
   });
+
+  // Collapsible settings sections toggle (unified settings view)
+  document.querySelectorAll('.settings-section-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const section = header.closest('.settings-section');
+      section?.classList.toggle('expanded');
+    });
+  });
+
+  // Qdrant: Test connection button
+  $('test-connection')?.addEventListener('click', testKnowledgeConnection);
+
+  // Qdrant: Save settings on input blur
+  $('qdrant-url')?.addEventListener('blur', saveKnowledgeSettings);
+  $('qdrant-key')?.addEventListener('blur', saveKnowledgeSettings);
+
+  // Firecrawl: Save API key on blur
+  $('firecrawl-key')?.addEventListener('blur', saveKnowledgeSettings);
+
+  // Notion: Test connection button
+  $('notion-test')?.addEventListener('click', testNotionConnection);
+
+  // Notion: Sync button
+  $('notion-sync')?.addEventListener('click', syncNotion);
+
+  // Notion: Save settings on token blur
+  $('notion-token')?.addEventListener('blur', saveNotionSettings);
+
+  // Notion: Save settings on checkbox change
+  $('notion-auto-sync')?.addEventListener('change', saveNotionSettings);
+
+  // RAG: Test connection button
+  $('rag-test-connection')?.addEventListener('click', testRagConnection);
+
+  // RAG: Save settings on input change
+  $('rag-enabled')?.addEventListener('change', saveRagSettings);
+  $('rag-ollama-url')?.addEventListener('blur', saveRagSettings);
+  $('rag-model')?.addEventListener('change', saveRagSettings);
 }
 
 function showSettings() {
@@ -626,28 +667,37 @@ function showSettings() {
     initSettingsUI();
     settingsInitialized = true;
   }
-  loadSettingsValues();
+
+  // Load all settings values (unified settings view)
+  loadSettingsValues();       // Spotlight settings
+  loadKnowledgeSettings();    // Qdrant + Firecrawl
+  loadNotionSettings();       // Notion
+  loadRagSettings();          // RAG Agent
 }
 
 // Knowledge UI functions
 async function loadKnowledgeSettings() {
   const qdrantUrl = $('qdrant-url') as HTMLInputElement;
   const qdrantKey = $('qdrant-key') as HTMLInputElement;
+  const firecrawlKey = $('firecrawl-key') as HTMLInputElement;
   if (!qdrantUrl || !qdrantKey) return;
 
   const settings = await window.claude.knowledgeGetSettings();
   qdrantUrl.value = settings.qdrantUrl || 'http://localhost:6333';
   qdrantKey.value = settings.qdrantApiKey || '';
+  if (firecrawlKey) firecrawlKey.value = settings.firecrawlApiKey || '';
 }
 
 async function saveKnowledgeSettings() {
   const qdrantUrl = $('qdrant-url') as HTMLInputElement;
   const qdrantKey = $('qdrant-key') as HTMLInputElement;
+  const firecrawlKey = $('firecrawl-key') as HTMLInputElement;
   if (!qdrantUrl || !qdrantKey) return;
 
   await window.claude.knowledgeSaveSettings({
     qdrantUrl: qdrantUrl.value.trim(),
-    qdrantApiKey: qdrantKey.value.trim() || undefined
+    qdrantApiKey: qdrantKey.value.trim() || undefined,
+    firecrawlApiKey: firecrawlKey?.value.trim() || undefined
   });
 }
 
@@ -1009,6 +1059,68 @@ function hideImportModal() {
   }
 }
 
+// Show the Add URL modal
+function showUrlModal() {
+  const modal = $('url-modal');
+  if (modal) modal.classList.add('open');
+}
+
+// Hide the Add URL modal and reset fields
+function hideUrlModal() {
+  const modal = $('url-modal');
+  const input = $('url-input') as HTMLInputElement;
+  const status = $('url-status');
+  if (modal) modal.classList.remove('open');
+  if (input) input.value = '';
+  if (status) {
+    status.textContent = '';
+    status.className = 'status-text';
+  }
+}
+
+// Handle URL ingestion from modal
+async function addUrlFromModal() {
+  const input = $('url-input') as HTMLInputElement;
+  const btn = $('url-add-btn') as HTMLButtonElement;
+  const status = $('url-status');
+  if (!input || !btn || !status) return;
+
+  const url = input.value.trim();
+  if (!url) {
+    status.textContent = 'Please enter a URL';
+    status.className = 'status-text error';
+    return;
+  }
+
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    status.textContent = 'URL must start with http:// or https://';
+    status.className = 'status-text error';
+    return;
+  }
+
+  btn.disabled = true;
+  status.textContent = 'Adding...';
+  status.className = 'status-text';
+
+  try {
+    const result = await window.claude.knowledgeIngestUrl(url);
+    if (result.success) {
+      status.textContent = `Added ${result.chunksIngested} chunks`;
+      status.className = 'status-text success';
+      await loadKnowledgeItems();
+      setTimeout(hideUrlModal, 1000);
+    } else {
+      status.textContent = result.error || 'Failed to add URL';
+      status.className = 'status-text error';
+    }
+  } catch (err) {
+    status.textContent = 'Failed to add URL';
+    status.className = 'status-text error';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function showKnowledgeIngestStatus(message: string, type: 'loading' | 'success' | 'error') {
   const ingestStatus = $('ingest-status');
   if (!ingestStatus) return;
@@ -1159,7 +1271,7 @@ function renderKnowledgeItems(items: (KnowledgeItem | KnowledgeSearchResult)[], 
     });
   });
 
-  // Attach click handlers for preview modal
+  // Attach click handlers for preview modal or opening URLs
   grid.querySelectorAll('.knowledge-card:not(.drop-zone-card)').forEach(card => {
     card.addEventListener('click', (e) => {
       // Don't trigger if clicking delete button
@@ -1168,14 +1280,22 @@ function renderKnowledgeItems(items: (KnowledgeItem | KnowledgeSearchResult)[], 
       const source = (card as HTMLElement).dataset.source;
       if (!source) return;
 
-      // Get all chunks for this source, sort by index, and concatenate content
+      // Get all chunks for this source, sort by index
       const chunks = items
         .filter(item => item.metadata?.source === source)
         .sort((a, b) => (a.metadata?.chunkIndex || 0) - (b.metadata?.chunkIndex || 0));
+
+      const type = chunks[0]?.metadata?.type;
+
+      // URL type: open in browser instead of showing modal
+      if (type === 'url') {
+        window.claude.openExternalUrl(source);
+        return;
+      }
+
+      // Other types: show preview modal with content
       const title = chunks[0]?.metadata?.filename || source.split('/').pop() || 'Unknown';
       const content = chunks.map(c => c.content).join('\n\n');
-
-      // Show modal
       showPreviewModal(title, content);
     });
   });
@@ -1245,17 +1365,6 @@ function setupDropZone() {
 }
 
 function initKnowledgeUI() {
-  // Collapsible settings sections toggle
-  document.querySelectorAll('.settings-section-header').forEach(header => {
-    header.addEventListener('click', () => {
-      const section = header.closest('.settings-section');
-      section?.classList.toggle('expanded');
-    });
-  });
-
-  // Test connection button
-  $('test-connection')?.addEventListener('click', testKnowledgeConnection);
-
   // Preview modal close handlers
   $('preview-modal-close')?.addEventListener('click', hidePreviewModal);
   $('preview-modal')?.addEventListener('click', (e) => {
@@ -1271,40 +1380,19 @@ function initKnowledgeUI() {
     }
   });
 
-  // File input kept for drag & drop compatibility (handled in setupDropZone)
-
-  // Footer buttons - Settings toggle
-  const settingsBtn = $('toggle-connection');
-  const settingsPanel = $('settings-panel');
+  // Add menu toggle
   const addMenu = $('add-menu');
-
-  settingsBtn?.addEventListener('click', () => {
-    settingsPanel?.classList.toggle('open');
-    // Close add menu if open
-    addMenu?.classList.remove('open');
-  });
-
-  // Footer buttons - Add button toggle
   const addBtn = $('knowledge-add-btn');
   addBtn?.addEventListener('click', () => {
     addMenu?.classList.toggle('open');
-    // Close settings panel if open
-    settingsPanel?.classList.remove('open');
   });
 
-  // Close menus when clicking outside
+  // Close add menu when clicking outside
   document.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
-    // Close add menu if clicking outside
     if (addMenu?.classList.contains('open')) {
       if (!target.closest('#knowledge-add-btn') && !target.closest('#add-menu')) {
         addMenu.classList.remove('open');
-      }
-    }
-    // Close settings panel if clicking outside
-    if (settingsPanel?.classList.contains('open')) {
-      if (!target.closest('#toggle-connection') && !target.closest('#settings-panel')) {
-        settingsPanel.classList.remove('open');
       }
     }
   });
@@ -1318,23 +1406,34 @@ function initKnowledgeUI() {
     }
   });
 
-  // Add Menu: Add URL
+  // Add Menu: Add URL - open modal
   $('add-menu-url')?.addEventListener('click', () => {
-    const url = prompt('Enter URL to add:');
-    if (url) {
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        showKnowledgeIngestStatus('Invalid URL - must start with http:// or https://', 'error');
-      } else {
-        ingestKnowledgeUrl(url);
-      }
-    }
     addMenu?.classList.remove('open');
+    showUrlModal();
   });
 
   // Add Menu: Import Notion
   $('add-menu-notion')?.addEventListener('click', () => {
     addMenu?.classList.remove('open');
     showImportModal();
+  });
+
+  // URL Modal: Close button
+  $('url-modal-close')?.addEventListener('click', hideUrlModal);
+
+  // URL Modal: Click backdrop to close
+  $('url-modal')?.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).classList.contains('import-modal')) {
+      hideUrlModal();
+    }
+  });
+
+  // URL Modal: Add button
+  $('url-add-btn')?.addEventListener('click', addUrlFromModal);
+
+  // URL Modal: Enter key to submit
+  $('url-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addUrlFromModal();
   });
 
   // Import Modal: Close button
@@ -1356,36 +1455,11 @@ function initKnowledgeUI() {
     }, 300);
   });
 
-  // Notion: Test connection button
-  $('notion-test')?.addEventListener('click', testNotionConnection);
-
-  // Notion: Sync button
-  $('notion-sync')?.addEventListener('click', syncNotion);
-
-  // Notion: Save settings on token blur
-  $('notion-token')?.addEventListener('blur', saveNotionSettings);
-
-  // Notion: Save settings on checkbox change
-  $('notion-auto-sync')?.addEventListener('change', saveNotionSettings);
-
   // Manual Import: Import button
   $('notion-import-btn')?.addEventListener('click', importNotionPage);
 
   // Manual Import: Check updates button
   $('check-updates-btn')?.addEventListener('click', checkForUpdates);
-
-  // RAG: Test connection button
-  $('rag-test-connection')?.addEventListener('click', testRagConnection);
-
-  // RAG: Save settings on input change
-  $('rag-enabled')?.addEventListener('change', saveRagSettings);
-  $('rag-ollama-url')?.addEventListener('blur', saveRagSettings);
-  $('rag-model')?.addEventListener('change', saveRagSettings);
-
-  // Load initial settings
-  loadKnowledgeSettings();
-  loadNotionSettings();
-  loadRagSettings();
 }
 
 // Sidebar functions

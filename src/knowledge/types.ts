@@ -12,6 +12,7 @@ export interface KnowledgeSettings {
   qdrantUrl: string;        // Default: "http://localhost:6333"
   qdrantApiKey?: string;    // Optional - for Qdrant Cloud
   collectionName: string;   // Default: "open-claude-knowledge"
+  firecrawlApiKey?: string; // Optional - for URL scraping via Firecrawl
 }
 
 // Default settings
