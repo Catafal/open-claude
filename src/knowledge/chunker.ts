@@ -53,10 +53,11 @@ export function chunkText(text: string): Chunk[] {
     }
 
     // Move start position, accounting for overlap
+    const prevStart = start;
     start = end - CHUNK_OVERLAP;
 
-    // Safety: ensure we always make progress
-    if (start <= chunks[chunks.length - 1]?.index || start < 0) {
+    // Safety: ensure we always make progress (avoid infinite loops)
+    if (start <= prevStart) {
       start = end;
     }
   }

@@ -671,3 +671,115 @@ body {
     background: rgba(255, 255, 255, 0.15);
   }
 }
+
+/* Preview Modal */
+.preview-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+}
+
+.preview-modal.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.preview-modal-content {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  transform: scale(0.95);
+  transition: transform 0.2s ease;
+}
+
+.preview-modal.open .preview-modal-content {
+  transform: scale(1);
+}
+
+.preview-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.preview-modal-title {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: rgba(0, 0, 0, 0.4);
+  padding: 0;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.preview-modal-close:hover {
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.preview-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #333;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Dark mode for modal */
+@media (prefers-color-scheme: dark) {
+  .preview-modal-content {
+    background: rgba(40, 40, 42, 0.95);
+  }
+
+  .preview-modal-header {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .preview-modal-title {
+    color: #f0f0f0;
+  }
+
+  .preview-modal-close {
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .preview-modal-close:hover {
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .preview-modal-body {
+    color: #e0e0e0;
+  }
+}

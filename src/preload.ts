@@ -123,6 +123,7 @@ contextBridge.exposeInMainWorld('claude', {
 
   // Knowledge Management functions
   openKnowledge: () => ipcRenderer.invoke('open-knowledge'),
+  knowledgeOpenFileDialog: () => ipcRenderer.invoke('knowledge-open-file-dialog'),
   knowledgeGetSettings: () => ipcRenderer.invoke('knowledge-get-settings'),
   knowledgeSaveSettings: (settings: { qdrantUrl?: string; qdrantApiKey?: string; collectionName?: string }) =>
     ipcRenderer.invoke('knowledge-save-settings', settings),
@@ -132,4 +133,5 @@ contextBridge.exposeInMainWorld('claude', {
   knowledgeSearch: (query: string, limit?: number) => ipcRenderer.invoke('knowledge-search', query, limit || 5),
   knowledgeList: () => ipcRenderer.invoke('knowledge-list'),
   knowledgeDelete: (ids: string[]) => ipcRenderer.invoke('knowledge-delete', ids),
+  knowledgeDeleteBySource: (source: string) => ipcRenderer.invoke('knowledge-delete-by-source', source),
 });

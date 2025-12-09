@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, globalShortcut, screen, Tray, Menu, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, session, globalShortcut, screen, Tray, Menu, nativeImage, dialog } from 'electron';
 import path from 'path';
 import crypto from 'crypto';
 import { isAuthenticated, getOrgId, makeRequest, streamCompletion, stopResponse, generateTitle, store, BASE_URL, prepareAttachmentPayload } from './api/client';
@@ -11,6 +11,7 @@ import {
   upsertVectors,
   searchVectors,
   deleteVectors,
+  deleteBySource,
   listItems,
   chunkText,
   parseFile,
@@ -760,10 +761,31 @@ ipcMain.handle('open-knowledge', async () => {
   createKnowledgeWindow();
 });
 
+// Open file dialog for knowledge files
+ipcMain.handle('knowledge-open-file-dialog', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Documents', extensions: ['txt', 'md', 'pdf'] }
+    ]
+  });
+  return result.canceled ? [] : result.filePaths;
+});
+
 // Get knowledge settings
 ipcMain.handle('knowledge-get-settings', async () => {
   const stored = store.get('knowledgeSettings') as KnowledgeSettingsStore | undefined;
   knowledgeSettings = { ...DEFAULT_KNOWLEDGE_SETTINGS, ...stored };
+
+  // Auto-initialize Qdrant client if URL is configured (persist connection like Claude session)
+  if (knowledgeSettings.qdrantUrl && knowledgeSettings.qdrantUrl !== DEFAULT_KNOWLEDGE_SETTINGS.qdrantUrl) {
+    try {
+      initQdrantClient(knowledgeSettings);
+    } catch (error) {
+      console.error('[Knowledge] Failed to auto-initialize Qdrant client:', error);
+    }
+  }
+
   return knowledgeSettings;
 });
 
@@ -820,9 +842,14 @@ ipcMain.handle('knowledge-ingest-file', async (_event, filePath: string) => {
       });
     }
 
-    // Upsert to Qdrant
+    // Upsert to Qdrant in batches (Qdrant Cloud has request size limits)
     await ensureCollection(knowledgeSettings.collectionName);
-    await upsertVectors(knowledgeSettings.collectionName, items);
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      const batch = items.slice(i, i + BATCH_SIZE);
+      await upsertVectors(knowledgeSettings.collectionName, batch);
+      console.log(`[Knowledge] Upserted batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(items.length / BATCH_SIZE)}`);
+    }
 
     console.log(`[Knowledge] Ingested ${items.length} chunks from ${filePath}`);
     return { success: true, chunksIngested: items.length };
@@ -864,9 +891,14 @@ ipcMain.handle('knowledge-ingest-url', async (_event, url: string) => {
       });
     }
 
-    // Upsert to Qdrant
+    // Upsert to Qdrant in batches (Qdrant Cloud has request size limits)
     await ensureCollection(knowledgeSettings.collectionName);
-    await upsertVectors(knowledgeSettings.collectionName, items);
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      const batch = items.slice(i, i + BATCH_SIZE);
+      await upsertVectors(knowledgeSettings.collectionName, batch);
+      console.log(`[Knowledge] Upserted batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(items.length / BATCH_SIZE)}`);
+    }
 
     console.log(`[Knowledge] Ingested ${items.length} chunks from ${url}`);
     return { success: true, chunksIngested: items.length };
@@ -894,8 +926,11 @@ ipcMain.handle('knowledge-search', async (_event, query: string, limit: number =
 
 // List all knowledge items
 ipcMain.handle('knowledge-list', async () => {
+  console.log('[Knowledge] IPC: knowledge-list called');
   try {
-    return await listItems(knowledgeSettings.collectionName);
+    const items = await listItems(knowledgeSettings.collectionName);
+    console.log(`[Knowledge] IPC: knowledge-list returning ${items.length} items`);
+    return items;
   } catch (error: any) {
     console.error('[Knowledge] List error:', error.message);
     return [];
@@ -910,6 +945,20 @@ ipcMain.handle('knowledge-delete', async (_event, ids: string[]) => {
     return { success: true };
   } catch (error: any) {
     console.error('[Knowledge] Delete error:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// Delete all knowledge items by source (deletes ALL chunks from a file/URL)
+ipcMain.handle('knowledge-delete-by-source', async (_event, source: string) => {
+  console.log(`[Knowledge] IPC: knowledge-delete-by-source called with source="${source}"`);
+  try {
+    const deletedCount = await deleteBySource(knowledgeSettings.collectionName, source);
+    console.log(`[Knowledge] Deleted ${deletedCount} items with source: ${source}`);
+    return { success: true, deletedCount };
+  } catch (error: any) {
+    console.error('[Knowledge] Delete by source error:', error.message);
+    console.error('[Knowledge] Full error:', error);
     return { success: false, error: error.message };
   }
 });

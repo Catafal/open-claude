@@ -149,6 +149,71 @@ export async function deleteVectors(
 }
 
 /**
+ * Delete all vectors matching a source.
+ * Scrolls ALL items (no filter), filters locally by source, then deletes.
+ */
+export async function deleteBySource(
+  collectionName: string,
+  source: string
+): Promise<number> {
+  const qdrant = getQdrantClient();
+
+  // Scroll ALL items and filter locally (filter in scroll can cause issues)
+  const pointIds: string[] = [];
+  let nextOffset: string | number | null | undefined = undefined;
+
+  console.log(`[Qdrant] deleteBySource: looking for source="${source}"`);
+
+  do {
+    // Build scroll params - only include offset if defined
+    const scrollParams: Record<string, unknown> = {
+      limit: 100,
+      with_payload: true,
+      with_vector: false
+    };
+    if (nextOffset !== undefined && nextOffset !== null) {
+      scrollParams.offset = nextOffset;
+    }
+
+    const result = await qdrant.scroll(collectionName, scrollParams);
+
+    console.log(`[Qdrant] Scroll returned ${result.points.length} points`);
+
+    // Filter locally by source and collect IDs
+    for (const point of result.points) {
+      const pointSource = point.payload?.source as string;
+      if (pointSource === source) {
+        pointIds.push(point.id as string);
+      }
+    }
+
+    // Get next offset for pagination
+    const rawOffset = result.next_page_offset;
+    nextOffset = (typeof rawOffset === 'string' || typeof rawOffset === 'number') ? rawOffset : null;
+  } while (nextOffset !== null && nextOffset !== undefined);
+
+  console.log(`[Qdrant] Found ${pointIds.length} vectors with source: ${source}`);
+
+  // Delete collected point IDs in batches
+  if (pointIds.length > 0) {
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < pointIds.length; i += BATCH_SIZE) {
+      const batch = pointIds.slice(i, i + BATCH_SIZE);
+      await qdrant.delete(collectionName, {
+        wait: true,
+        points: batch
+      });
+      console.log(`[Qdrant] Deleted batch ${Math.floor(i / BATCH_SIZE) + 1}`);
+    }
+    console.log(`[Qdrant] Deleted ${pointIds.length} vectors with source: ${source}`);
+  } else {
+    console.log(`[Qdrant] No vectors found with source: ${source}`);
+  }
+
+  return pointIds.length;
+}
+
+/**
  * List all items in the collection.
  * Uses scroll API for pagination.
  */
@@ -158,14 +223,18 @@ export async function listItems(
 ): Promise<KnowledgeItem[]> {
   const qdrant = getQdrantClient();
 
+  console.log(`[Qdrant] listItems: fetching from collection "${collectionName}"`);
+
   const result = await qdrant.scroll(collectionName, {
     limit,
     with_payload: true,
     with_vector: false  // Don't need vectors for listing
   });
 
+  console.log(`[Qdrant] listItems: got ${result.points.length} points`);
+
   // Map to KnowledgeItem format
-  return result.points.map(point => ({
+  const items = result.points.map(point => ({
     id: point.id as string,
     content: (point.payload?.content as string) || '',
     metadata: {
@@ -177,4 +246,10 @@ export async function listItems(
       dateAdded: (point.payload?.dateAdded as string) || ''
     }
   }));
+
+  // Log unique sources
+  const sources = [...new Set(items.map(i => i.metadata.source))];
+  console.log(`[Qdrant] listItems: unique sources:`, sources);
+
+  return items;
 }

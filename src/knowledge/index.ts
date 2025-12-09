@@ -22,6 +22,7 @@ export {
   upsertVectors,
   searchVectors,
   deleteVectors,
+  deleteBySource,
   listItems
 } from './qdrant';
 

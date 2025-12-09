@@ -572,7 +572,9 @@ function renderKnowledgeItems(items: (KnowledgeItem | KnowledgeSearchResult)[], 
   // Build cards HTML
   const cardsHTML = Array.from(bySource.entries())
     .map(([source, chunks]) => {
-      const first = chunks[0];
+      // Sort by chunkIndex to get the first chunk (beginning of file)
+      const sorted = [...chunks].sort((a, b) => (a.metadata?.chunkIndex || 0) - (b.metadata?.chunkIndex || 0));
+      const first = sorted[0];
       const type = first.metadata?.type || 'txt';
       const icon = typeIcons[type] || '📄';
       const title = first.metadata?.filename || source.split('/').pop() || 'Unknown';
@@ -607,16 +609,57 @@ function renderKnowledgeItems(items: (KnowledgeItem | KnowledgeSearchResult)[], 
       const source = (e.target as HTMLElement).dataset.source;
       if (!source) return;
 
-      const idsToDelete = items
-        .filter(item => item.metadata?.source === source)
-        .map(item => item.id);
-
-      if (idsToDelete.length > 0) {
-        await window.claude.knowledgeDelete(idsToDelete);
-        await loadKnowledgeItems();
+      // Use deleteBySource to delete ALL chunks for this source (not just fetched 100)
+      try {
+        await window.claude.knowledgeDeleteBySource(source);
+      } catch (err) {
+        // Ignore errors (item may already be deleted)
+        console.warn('[Knowledge] Delete error (may already be deleted):', err);
       }
+      // Always refresh the UI
+      await loadKnowledgeItems();
     });
   });
+
+  // Attach click handlers for preview modal
+  grid.querySelectorAll('.knowledge-card:not(.drop-zone-card)').forEach(card => {
+    card.addEventListener('click', (e) => {
+      // Don't trigger if clicking delete button
+      if ((e.target as HTMLElement).classList.contains('card-delete')) return;
+
+      const source = (card as HTMLElement).dataset.source;
+      if (!source) return;
+
+      // Get all chunks for this source, sort by index, and concatenate content
+      const chunks = items
+        .filter(item => item.metadata?.source === source)
+        .sort((a, b) => (a.metadata?.chunkIndex || 0) - (b.metadata?.chunkIndex || 0));
+      const title = chunks[0]?.metadata?.filename || source.split('/').pop() || 'Unknown';
+      const content = chunks.map(c => c.content).join('\n\n');
+
+      // Show modal
+      showPreviewModal(title, content);
+    });
+  });
+}
+
+// Show preview modal with content
+function showPreviewModal(title: string, content: string) {
+  const modal = $('preview-modal');
+  const modalTitle = $('preview-modal-title');
+  const modalBody = $('preview-modal-body');
+
+  if (!modal || !modalTitle || !modalBody) return;
+
+  modalTitle.textContent = title;
+  modalBody.textContent = content;
+  modal.classList.add('open');
+}
+
+// Hide preview modal
+function hidePreviewModal() {
+  const modal = $('preview-modal');
+  if (modal) modal.classList.remove('open');
 }
 
 // Setup drop zone event handlers
@@ -654,9 +697,12 @@ function setupDropZone() {
     }
   });
 
-  // Click to open file picker
-  newDropZone.addEventListener('click', () => {
-    knowledgeFileInput?.click();
+  // Click to open file picker - use Electron dialog
+  newDropZone.addEventListener('click', async () => {
+    const filePaths = await window.claude.knowledgeOpenFileDialog();
+    for (const filePath of filePaths) {
+      await ingestKnowledgeFile(filePath);
+    }
   });
 }
 
@@ -679,20 +725,19 @@ function initKnowledgeUI() {
   // Test connection button
   $('test-connection')?.addEventListener('click', testKnowledgeConnection);
 
-  // File input change handler
-  const knowledgeFileInput = $('knowledge-file-input') as HTMLInputElement;
-  knowledgeFileInput?.addEventListener('change', async () => {
-    const files = knowledgeFileInput.files;
-    if (!files || files.length === 0) return;
-
-    for (const file of Array.from(files)) {
-      const filePath = (file as any).path;
-      if (filePath) {
-        await ingestKnowledgeFile(filePath);
-      }
+  // Preview modal close handlers
+  $('preview-modal-close')?.addEventListener('click', hidePreviewModal);
+  $('preview-modal')?.addEventListener('click', (e) => {
+    // Close if clicking backdrop (not content)
+    if ((e.target as HTMLElement).classList.contains('preview-modal')) {
+      hidePreviewModal();
     }
-    knowledgeFileInput.value = '';
   });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hidePreviewModal();
+  });
+
+  // File input kept for drag & drop compatibility (handled in setupDropZone)
 
   // Footer buttons - Settings toggle
   const settingsBtn = $('toggle-connection');
@@ -730,10 +775,13 @@ function initKnowledgeUI() {
     }
   });
 
-  // Add Menu: Add Files
-  $('add-menu-file')?.addEventListener('click', () => {
-    knowledgeFileInput?.click();
+  // Add Menu: Add Files - use Electron dialog for proper file paths
+  $('add-menu-file')?.addEventListener('click', async () => {
     addMenu?.classList.remove('open');
+    const filePaths = await window.claude.knowledgeOpenFileDialog();
+    for (const filePath of filePaths) {
+      await ingestKnowledgeFile(filePath);
+    }
   });
 
   // Add Menu: Add URL
