@@ -362,3 +362,237 @@ body {
     color: rgba(255, 255, 255, 0.35);
   }
 }
+
+/* =============================================================================
+   TTS / VibeVoice Settings Styles
+   ============================================================================= */
+
+/* Select dropdown */
+#tts-engine-select,
+#vibevoice-model-select {
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  font-size: 13px;
+  color: #1a1a1a;
+  cursor: pointer;
+  min-width: 180px;
+}
+
+#tts-engine-select:hover,
+#vibevoice-model-select:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+#tts-engine-select:focus,
+#vibevoice-model-select:focus {
+  outline: none;
+  border-color: #CC785C;
+  box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+}
+
+/* Server URL input */
+#vibevoice-url-input {
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  font-size: 13px;
+  font-family: 'SF Mono', Menlo, monospace;
+  color: #1a1a1a;
+  min-width: 200px;
+}
+
+#vibevoice-url-input:focus {
+  outline: none;
+  border-color: #CC785C;
+  box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+}
+
+/* Server status indicator */
+.server-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-indicator.status-checking {
+  background: #f5a623;
+  animation: pulse-status 1s infinite;
+}
+
+.status-indicator.status-connected {
+  background: #4cd964;
+}
+
+.status-indicator.status-disconnected {
+  background: #ff3b30;
+}
+
+@keyframes pulse-status {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+#vibevoice-status-text {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.btn-small {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  color: #1a1a1a;
+  transition: all 0.15s;
+}
+
+.btn-small:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* Setup Guide */
+.vibevoice-setup-guide {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(204, 120, 92, 0.08);
+  border-radius: 10px;
+  border: 1px solid rgba(204, 120, 92, 0.2);
+}
+
+.vibevoice-setup-guide h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #CC785C;
+  margin-bottom: 12px;
+}
+
+.setup-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setup-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: #CC785C;
+  color: white;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.step-content {
+  flex: 1;
+}
+
+.step-content strong {
+  display: block;
+  font-size: 13px;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+}
+
+.step-content code {
+  display: inline-block;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  color: #1a1a1a;
+  user-select: all;
+}
+
+.step-hint {
+  display: block;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.5);
+  margin-top: 4px;
+}
+
+.setup-note {
+  margin-top: 12px;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.5);
+  line-height: 1.4;
+}
+
+/* Dark mode for TTS settings */
+@media (prefers-color-scheme: dark) {
+  #tts-engine-select,
+  #vibevoice-model-select {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #f0f0f0;
+  }
+
+  #tts-engine-select:hover,
+  #vibevoice-model-select:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  #vibevoice-url-input {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #f0f0f0;
+  }
+
+  #vibevoice-status-text {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .btn-small {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #f0f0f0;
+  }
+
+  .btn-small:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .vibevoice-setup-guide {
+    background: rgba(204, 120, 92, 0.12);
+    border-color: rgba(204, 120, 92, 0.3);
+  }
+
+  .step-content strong {
+    color: #f0f0f0;
+  }
+
+  .step-content code {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f0f0f0;
+  }
+
+  .step-hint {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .setup-note {
+    color: rgba(255, 255, 255, 0.5);
+  }
+}

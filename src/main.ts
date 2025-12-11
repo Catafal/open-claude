@@ -58,6 +58,10 @@ const DEFAULT_SETTINGS: SettingsSchema = {
   spotlightKeybind: 'CommandOrControl+Shift+C',
   spotlightPersistHistory: true,
   spotlightSystemPrompt: 'search for real citations that verify your response, if you do some affirmation',
+  // TTS defaults - Kokoro is fast & local, VibeVoice needs server
+  ttsEngine: 'kokoro',
+  vibevoiceModel: '0.5b',
+  vibevoiceServerUrl: 'http://localhost:8000',
 };
 
 // Get settings with defaults
@@ -466,15 +470,56 @@ async function getKokoroTTS(retries = 3): Promise<any> {
 }
 
 /**
- * TTS IPC handler - converts text to speech using Kokoro.
- * Returns audio samples for playback in the renderer process.
+ * Generate speech using local VibeVoice server.
+ * Server must be running: python -m vibevoice_api.server --port 8000
+ * Uses OpenAI-compatible /v1/audio/speech endpoint.
+ */
+async function generateVibeVoiceSpeech(
+  text: string,
+  serverUrl: string
+): Promise<{ samples: number[]; sampleRate: number }> {
+  const response = await fetch(`${serverUrl}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      input: text,
+      voice: 'af_heart',
+      response_format: 'pcm'
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`VibeVoice server error: ${response.status}`);
+  }
+
+  // Convert audio buffer to Float32Array samples
+  const audioBuffer = await response.arrayBuffer();
+  const samples = new Float32Array(audioBuffer);
+
+  return {
+    samples: Array.from(samples),
+    sampleRate: 24000
+  };
+}
+
+/**
+ * TTS IPC handler - converts text to speech.
+ * Routes to Kokoro (local) or VibeVoice (server) based on settings.
  */
 ipcMain.handle('spotlight-speak', async (_event, text: string) => {
   try {
+    const settings = getSettings();
+
+    // Route to VibeVoice if selected and server URL configured
+    if (settings.ttsEngine === 'vibevoice') {
+      console.log('[TTS] Using VibeVoice server:', settings.vibevoiceServerUrl);
+      return generateVibeVoiceSpeech(text, settings.vibevoiceServerUrl);
+    }
+
+    // Default: Use Kokoro (fast, local)
     const tts = await getKokoroTTS();
     const audio = await tts.generate(text, { voice: 'af_heart' });
 
-    // Return audio data for Web Audio API playback in renderer
     return {
       samples: Array.from(audio.audio as Float32Array),
       sampleRate: audio.sampling_rate || 24000
@@ -482,6 +527,29 @@ ipcMain.handle('spotlight-speak', async (_event, text: string) => {
   } catch (error) {
     console.error('[TTS] Error generating speech:', error);
     throw error;
+  }
+});
+
+/**
+ * Check if VibeVoice server is running by pinging its health endpoint.
+ * Returns true if server responds, false otherwise.
+ */
+ipcMain.handle('check-vibevoice-server', async (_event, serverUrl: string) => {
+  try {
+    // Try to reach the server's root or models endpoint
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
+
+    const response = await fetch(`${serverUrl}/v1/models`, {
+      method: 'GET',
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+    return response.ok;
+  } catch (error) {
+    // Server not running or network error
+    return false;
   }
 });
 

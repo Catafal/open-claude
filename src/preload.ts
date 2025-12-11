@@ -121,9 +121,13 @@ contextBridge.exposeInMainWorld('claude', {
   spotlightGetHistory: () => ipcRenderer.invoke('spotlight-get-history'),
   spotlightNewChat: () => ipcRenderer.invoke('spotlight-new-chat'),
 
-  // TTS (Text-to-Speech) - converts text to audio using Kokoro
+  // TTS (Text-to-Speech) - converts text to audio using Kokoro or VibeVoice
   spotlightSpeak: (text: string): Promise<{ samples: number[]; sampleRate: number }> =>
     ipcRenderer.invoke('spotlight-speak', text),
+
+  // Check if VibeVoice server is running (used in settings UI)
+  checkVibeVoiceServer: (serverUrl: string): Promise<boolean> =>
+    ipcRenderer.invoke('check-vibevoice-server', serverUrl),
 
   // Search modal toggle (triggered by global Command+K shortcut)
   onToggleSearchModal: (callback: () => void) => {

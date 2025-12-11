@@ -48,6 +48,87 @@
         </div>
       </div>
 
+      <!-- TTS Settings Section -->
+      <div class="settings-section">
+        <h2>Text-to-Speech</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="tts-engine-select">TTS Engine</label>
+            <span class="setting-description">Kokoro is fast & local. VibeVoice is expressive but needs local server.</span>
+          </div>
+          <select id="tts-engine-select">
+            <option value="kokoro">Kokoro (Fast, Local)</option>
+            <option value="vibevoice">VibeVoice (Expressive)</option>
+          </select>
+        </div>
+
+        <div id="vibevoice-options" style="display: none;">
+          <!-- Server Status -->
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Server Status</label>
+              <span class="setting-description">VibeVoice server connection</span>
+            </div>
+            <div class="server-status">
+              <span id="vibevoice-status-indicator" class="status-indicator status-checking"></span>
+              <span id="vibevoice-status-text">Checking...</span>
+              <button id="vibevoice-check-btn" class="btn-small">Check</button>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="vibevoice-model-select">VibeVoice Model</label>
+              <span class="setting-description">Must match what you're running locally</span>
+            </div>
+            <select id="vibevoice-model-select">
+              <option value="0.5b">0.5B Streaming (Fast, 300ms)</option>
+              <option value="1.5b">1.5B Quality (More expressive)</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="vibevoice-url-input">Server URL</label>
+              <span class="setting-description">Local VibeVoice server address</span>
+            </div>
+            <input type="text" id="vibevoice-url-input" placeholder="http://localhost:8000">
+          </div>
+
+          <!-- Setup Guide -->
+          <div class="vibevoice-setup-guide">
+            <h3>Setup Guide</h3>
+            <div class="setup-steps">
+              <div class="setup-step" id="step-python">
+                <span class="step-number">1</span>
+                <div class="step-content">
+                  <strong>Install Python 3.8+</strong>
+                  <code>brew install python</code>
+                </div>
+              </div>
+              <div class="setup-step" id="step-setup">
+                <span class="step-number">2</span>
+                <div class="step-content">
+                  <strong>Run Setup Script</strong>
+                  <code>~/.vibevoice/setup.sh</code>
+                  <span class="step-hint">Or: pip install vibevoice-api</span>
+                </div>
+              </div>
+              <div class="setup-step" id="step-server">
+                <span class="step-number">3</span>
+                <div class="step-content">
+                  <strong>Start Server</strong>
+                  <code>~/.vibevoice/start-server.sh</code>
+                  <span class="step-hint">Keep this terminal open</span>
+                </div>
+              </div>
+            </div>
+            <p class="setup-note">First run downloads the model (~2-4GB). Requires GPU with 8GB+ VRAM for best performance.</p>
+          </div>
+        </div>
+      </div>
+
       <!-- About Section -->
       <div class="settings-section">
         <h2>About</h2>

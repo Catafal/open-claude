@@ -6,6 +6,10 @@ interface Settings {
   spotlightKeybind: string;
   spotlightPersistHistory: boolean;
   spotlightSystemPrompt: string;
+  // TTS settings
+  ttsEngine: 'kokoro' | 'vibevoice';
+  vibevoiceModel: '0.5b' | '1.5b';
+  vibevoiceServerUrl: string;
 }
 
 // DOM Elements
@@ -13,6 +17,17 @@ const keybindInput = document.getElementById('keybind-input') as HTMLElement;
 const keybindDisplay = document.getElementById('keybind-display') as HTMLElement;
 const persistHistoryCheckbox = document.getElementById('persist-history') as HTMLInputElement;
 const systemPromptTextarea = document.getElementById('spotlight-system-prompt') as HTMLTextAreaElement;
+
+// TTS DOM elements
+const ttsEngineSelect = document.getElementById('tts-engine-select') as HTMLSelectElement;
+const vibevoiceOptions = document.getElementById('vibevoice-options') as HTMLElement;
+const vibevoiceModelSelect = document.getElementById('vibevoice-model-select') as HTMLSelectElement;
+const vibevoiceUrlInput = document.getElementById('vibevoice-url-input') as HTMLInputElement;
+
+// VibeVoice server status elements
+const vibevoiceStatusIndicator = document.getElementById('vibevoice-status-indicator') as HTMLElement;
+const vibevoiceStatusText = document.getElementById('vibevoice-status-text') as HTMLElement;
+const vibevoiceCheckBtn = document.getElementById('vibevoice-check-btn') as HTMLButtonElement;
 
 let isRecordingKeybind = false;
 let currentSettings: Settings | null = null;
@@ -109,6 +124,25 @@ async function loadSettings() {
     keybindDisplay.textContent = formatKeybind(currentSettings.spotlightKeybind);
     persistHistoryCheckbox.checked = currentSettings.spotlightPersistHistory;
     systemPromptTextarea.value = currentSettings.spotlightSystemPrompt || '';
+
+    // TTS settings
+    if (ttsEngineSelect) {
+      ttsEngineSelect.value = currentSettings.ttsEngine || 'kokoro';
+    }
+    if (vibevoiceModelSelect) {
+      vibevoiceModelSelect.value = currentSettings.vibevoiceModel || '0.5b';
+    }
+    if (vibevoiceUrlInput) {
+      vibevoiceUrlInput.value = currentSettings.vibevoiceServerUrl || 'http://localhost:8000';
+    }
+    // Show/hide VibeVoice options based on engine
+    if (vibevoiceOptions) {
+      vibevoiceOptions.style.display = currentSettings.ttsEngine === 'vibevoice' ? 'block' : 'none';
+      // Auto-check server status if VibeVoice is selected
+      if (currentSettings.ttsEngine === 'vibevoice') {
+        checkVibeVoiceServer();
+      }
+    }
   }
 }
 
@@ -199,6 +233,72 @@ persistHistoryCheckbox.addEventListener('change', () => {
 systemPromptTextarea.addEventListener('blur', async () => {
   if (!currentSettings) return;
   currentSettings = await claude.saveSettings({ spotlightSystemPrompt: systemPromptTextarea.value });
+});
+
+// TTS engine select - show/hide vibevoice options and save
+ttsEngineSelect?.addEventListener('change', async () => {
+  if (!currentSettings) return;
+  const engine = ttsEngineSelect.value as 'kokoro' | 'vibevoice';
+  // Show/hide VibeVoice-specific options
+  if (vibevoiceOptions) {
+    vibevoiceOptions.style.display = engine === 'vibevoice' ? 'block' : 'none';
+  }
+  currentSettings = await claude.saveSettings({ ttsEngine: engine });
+  // Auto-check server when switching to VibeVoice
+  if (engine === 'vibevoice') {
+    checkVibeVoiceServer();
+  }
+});
+
+// VibeVoice model select
+vibevoiceModelSelect?.addEventListener('change', async () => {
+  if (!currentSettings) return;
+  currentSettings = await claude.saveSettings({
+    vibevoiceModel: vibevoiceModelSelect.value as '0.5b' | '1.5b'
+  });
+});
+
+// VibeVoice server URL - save on blur and recheck status
+vibevoiceUrlInput?.addEventListener('blur', async () => {
+  if (!currentSettings) return;
+  currentSettings = await claude.saveSettings({ vibevoiceServerUrl: vibevoiceUrlInput.value });
+  // Recheck server status with new URL
+  checkVibeVoiceServer();
+});
+
+/**
+ * Check if VibeVoice server is running and update status indicator.
+ * Pings the server's health endpoint to verify connection.
+ */
+async function checkVibeVoiceServer() {
+  if (!vibevoiceStatusIndicator || !vibevoiceStatusText) return;
+
+  const serverUrl = vibevoiceUrlInput?.value || 'http://localhost:8000';
+
+  // Set checking state
+  vibevoiceStatusIndicator.className = 'status-indicator status-checking';
+  vibevoiceStatusText.textContent = 'Checking...';
+
+  try {
+    // Use IPC to check server (avoids CORS issues in renderer)
+    const isConnected = await claude.checkVibeVoiceServer(serverUrl);
+
+    if (isConnected) {
+      vibevoiceStatusIndicator.className = 'status-indicator status-connected';
+      vibevoiceStatusText.textContent = 'Connected';
+    } else {
+      vibevoiceStatusIndicator.className = 'status-indicator status-disconnected';
+      vibevoiceStatusText.textContent = 'Not running';
+    }
+  } catch (error) {
+    vibevoiceStatusIndicator.className = 'status-indicator status-disconnected';
+    vibevoiceStatusText.textContent = 'Not running';
+  }
+}
+
+// VibeVoice check button click handler
+vibevoiceCheckBtn?.addEventListener('click', () => {
+  checkVibeVoiceServer();
 });
 
 // Load settings on page load

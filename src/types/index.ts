@@ -3,6 +3,10 @@ export interface SettingsSchema {
   spotlightKeybind: string;
   spotlightPersistHistory: boolean;
   spotlightSystemPrompt: string; // Instructions prepended to all spotlight messages
+  // TTS (Text-to-Speech) settings
+  ttsEngine: 'kokoro' | 'vibevoice';   // Which TTS engine to use
+  vibevoiceModel: '0.5b' | '1.5b';     // VibeVoice model (must match local server)
+  vibevoiceServerUrl: string;          // Local VibeVoice server URL
 }
 
 // Knowledge settings (re-exported for StoreSchema compatibility)
