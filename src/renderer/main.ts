@@ -644,6 +644,14 @@ function initSettingsUI() {
   $('rag-enabled')?.addEventListener('change', saveRagSettings);
   $('rag-ollama-url')?.addEventListener('blur', saveRagSettings);
   $('rag-model')?.addEventListener('change', saveRagSettings);
+
+  // Memory: Test connection button
+  $('memory-test-connection')?.addEventListener('click', testMemoryConnection);
+
+  // Memory: Save settings on input change
+  $('settings-memory-enabled')?.addEventListener('change', saveMemorySettings);
+  $('settings-memory-supabase-url')?.addEventListener('blur', saveMemorySettings);
+  $('settings-memory-supabase-key')?.addEventListener('blur', saveMemorySettings);
 }
 
 function showSettings() {
@@ -673,6 +681,7 @@ function showSettings() {
   loadKnowledgeSettings();    // Qdrant + Firecrawl
   loadNotionSettings();       // Notion
   loadRagSettings();          // RAG Agent
+  loadMemorySettings();       // Memory
 }
 
 // Knowledge UI functions
@@ -843,6 +852,56 @@ async function testRagConnection() {
 
   await saveRagSettings();
   const result = await window.claude.ragTestConnection?.();
+
+  if (result?.success) {
+    status.textContent = 'Connected!';
+    status.className = 'status-text success';
+  } else {
+    status.textContent = `Error: ${result?.error || 'Failed to connect'}`;
+    status.className = 'status-text error';
+  }
+  testBtn.disabled = false;
+}
+
+// Memory settings functions
+async function loadMemorySettings() {
+  const enabled = $('settings-memory-enabled') as HTMLInputElement;
+  const supabaseUrl = $('settings-memory-supabase-url') as HTMLInputElement;
+  const supabaseKey = $('settings-memory-supabase-key') as HTMLInputElement;
+  if (!enabled || !supabaseUrl || !supabaseKey) return;
+
+  const settings = await window.claude.memoryGetSettings?.();
+  if (!settings) return;
+
+  enabled.checked = settings.enabled !== false;
+  supabaseUrl.value = settings.supabaseUrl || '';
+  supabaseKey.value = settings.supabaseAnonKey || '';
+}
+
+async function saveMemorySettings() {
+  const enabled = $('settings-memory-enabled') as HTMLInputElement;
+  const supabaseUrl = $('settings-memory-supabase-url') as HTMLInputElement;
+  const supabaseKey = $('settings-memory-supabase-key') as HTMLInputElement;
+  if (!enabled || !supabaseUrl || !supabaseKey) return;
+
+  await window.claude.memorySaveSettings?.({
+    enabled: enabled.checked,
+    supabaseUrl: supabaseUrl.value.trim(),
+    supabaseAnonKey: supabaseKey.value.trim()
+  });
+}
+
+async function testMemoryConnection() {
+  const testBtn = $('memory-test-connection') as HTMLButtonElement;
+  const status = $('memory-connection-status') as HTMLElement;
+  if (!testBtn || !status) return;
+
+  testBtn.disabled = true;
+  status.textContent = 'Testing...';
+  status.className = 'status-text';
+
+  await saveMemorySettings();
+  const result = await window.claude.memoryTestConnection?.();
 
   if (result?.success) {
     status.textContent = 'Connected!';

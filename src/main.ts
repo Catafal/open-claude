@@ -38,6 +38,16 @@ import {
   DEFAULT_RAG_SETTINGS,
   type RAGSettings
 } from './rag';
+import {
+  initSupabaseClient,
+  testSupabaseConnection,
+  initMemoryWorker,
+  addConversationPair,
+  scheduleProcessing,
+  flushBuffer,
+  getMemoriesForContext
+} from './memory';
+import type { MemorySettingsStore } from './types';
 import { checkForUpdatesAndNotify } from './updater';
 
 let mainWindow: BrowserWindow | null = null;
@@ -52,6 +62,16 @@ let notionSettings: NotionSettings = { ...DEFAULT_NOTION_SETTINGS };
 
 // RAG settings (loaded from store)
 let ragSettings: RAGSettings = { ...DEFAULT_RAG_SETTINGS };
+
+// Memory settings defaults
+const DEFAULT_MEMORY_SETTINGS: MemorySettingsStore = {
+  enabled: false,  // Disabled by default until configured
+  supabaseUrl: '',
+  supabaseAnonKey: ''
+};
+
+// Memory settings (loaded from store)
+let memorySettings: MemorySettingsStore = { ...DEFAULT_MEMORY_SETTINGS };
 
 // Default settings
 const DEFAULT_SETTINGS: SettingsSchema = {
@@ -261,10 +281,15 @@ let spotlightConversationId: string | null = null;
 let spotlightParentMessageUuid: string | null = null;
 let spotlightMessages: Array<{ role: 'user' | 'assistant'; text: string }> = [];
 
-// Spotlight send message (uses Haiku)
-ipcMain.handle('spotlight-send', async (_event, message: string) => {
+// Spotlight send message (supports Haiku or Opus model)
+ipcMain.handle('spotlight-send', async (_event, message: string, model?: string) => {
   const orgId = await getOrgId();
   if (!orgId) throw new Error('Not authenticated');
+
+  // Determine model ID based on selection (default to haiku)
+  const modelId = model === 'opus'
+    ? 'claude-opus-4-5-20251101'
+    : 'claude-haiku-4-5-20251001';
 
   // Get system prompt from settings and prepend if configured
   const settings = getSettings();
@@ -280,7 +305,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string) => {
       'POST',
       {
         name: '',
-        model: 'claude-haiku-4-5-20251001',
+        model: modelId,
         is_temporary: true,
         include_conversation_preferences: true
       }
@@ -329,11 +354,30 @@ ipcMain.handle('spotlight-send', async (_event, message: string) => {
       // Store assistant response
       spotlightMessages.push({ role: 'assistant', text: fullText });
       spotlightWindow?.webContents.send('spotlight-complete', { fullText, messageUuid });
+
+      // Add to memory buffer if enabled (schedule extraction after 10 min)
+      if (memorySettings.enabled) {
+        addConversationPair(message, fullText, 'spotlight');
+        scheduleProcessing();
+      }
     }
   };
 
-  // === RAG Processing for Spotlight ===
+  // === Memory + RAG Processing for Spotlight ===
   let finalPrompt = promptWithSystem;
+  let memoryContext = '';
+
+  // Retrieve relevant memories if enabled
+  if (memorySettings.enabled && knowledgeSettings.collectionName) {
+    try {
+      memoryContext = await getMemoriesForContext(message, knowledgeSettings.collectionName, 5, 0.4);
+      if (memoryContext) {
+        console.log('[Memory/Spotlight] Retrieved memories for context');
+      }
+    } catch (memError: unknown) {
+      console.error('[Memory/Spotlight] Error retrieving memories:', memError);
+    }
+  }
 
   if (ragSettings.enabled && knowledgeSettings.collectionName) {
     try {
@@ -362,8 +406,8 @@ ipcMain.handle('spotlight-send', async (_event, message: string) => {
           message: `Found ${ragResult.contexts.length} sources`
         });
 
-        // Inject context + use cleaned query
-        finalPrompt = formatContextForClaude(ragResult.contexts) + cleanedPromptWithSystem;
+        // Inject memories + knowledge context + cleaned query
+        finalPrompt = memoryContext + formatContextForClaude(ragResult.contexts) + cleanedPromptWithSystem;
         console.log(`[RAG/Spotlight] Injected ${ragResult.contexts.length} context chunks`);
         console.log(`[RAG/Spotlight] Cleaned query: "${cleanedQuery}"`);
       } else if (ragResult.decision.needs_retrieval) {
@@ -372,24 +416,29 @@ ipcMain.handle('spotlight-send', async (_event, message: string) => {
           status: 'skipped',
           message: 'No matching content'
         });
-        finalPrompt = cleanedPromptWithSystem;
+        finalPrompt = memoryContext + cleanedPromptWithSystem;
         console.log(`[RAG/Spotlight] No results, using cleaned query: "${cleanedQuery}"`);
       } else {
-        // Notify Spotlight UI: No retrieval needed
+        // Notify Spotlight UI: No retrieval needed, but still include memories
         spotlightWindow?.webContents.send('spotlight-rag', {
           status: 'skipped',
           message: ''
         });
+        finalPrompt = memoryContext + promptWithSystem;
       }
     } catch (ragError: unknown) {
-      // Non-blocking error - continue without RAG
+      // Non-blocking error - continue with memories only
       const errorMessage = ragError instanceof Error ? ragError.message : String(ragError);
       console.error('[RAG/Spotlight] Error (continuing):', errorMessage);
       spotlightWindow?.webContents.send('spotlight-rag', {
         status: 'error',
         message: 'RAG unavailable'
       });
+      finalPrompt = memoryContext + promptWithSystem;
     }
+  } else if (memoryContext) {
+    // RAG disabled but we have memories - still inject them
+    finalPrompt = memoryContext + promptWithSystem;
   }
   // === End RAG Processing ===
 
@@ -813,16 +862,36 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
     },
     onComplete: (fullText, steps, messageUuid) => {
       mainWindow?.webContents.send('message-complete', { conversationId, fullText, steps, messageUuid });
+
+      // Add to memory buffer if enabled (schedule extraction after 10 min)
+      if (memorySettings.enabled) {
+        addConversationPair(message, fullText, 'main_chat');
+        scheduleProcessing();
+      }
     }
   };
 
   // Send Claude the uploaded file UUIDs (metadata stays client-side for display)
   const fileIds = attachments?.map(a => a.document_id).filter(Boolean) || [];
 
-  // === RAG Processing ===
-  // If RAG is enabled and knowledge base is configured, use local agent to decide on retrieval
+  // === Memory + RAG Processing ===
+  // Retrieve relevant memories and knowledge context
   let augmentedMessage = message;
+  let memoryContext = '';
 
+  // Retrieve relevant memories if enabled
+  if (memorySettings.enabled && knowledgeSettings.collectionName) {
+    try {
+      memoryContext = await getMemoriesForContext(message, knowledgeSettings.collectionName, 5, 0.4);
+      if (memoryContext) {
+        console.log('[Memory] Retrieved memories for context');
+      }
+    } catch (memError: unknown) {
+      console.error('[Memory] Error retrieving memories:', memError);
+    }
+  }
+
+  // RAG processing for knowledge base retrieval
   if (ragSettings.enabled && knowledgeSettings.collectionName) {
     try {
       // Notify UI: Agent is analyzing the query
@@ -854,8 +923,8 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
           }
         });
 
-        // Inject context + use cleaned query
-        augmentedMessage = formatContextForClaude(ragResult.contexts) + cleanedQuery;
+        // Inject memories + knowledge context + cleaned query
+        augmentedMessage = memoryContext + formatContextForClaude(ragResult.contexts) + cleanedQuery;
         console.log(`[RAG] Injected ${ragResult.contexts.length} context chunks (${ragResult.processingTimeMs}ms)`);
         console.log(`[RAG] Cleaned query: "${cleanedQuery}"`);
       } else if (ragResult.decision.needs_retrieval) {
@@ -865,19 +934,20 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
           status: 'skipped',
           message: 'No matching content found'
         });
-        augmentedMessage = cleanedQuery;
+        augmentedMessage = memoryContext + cleanedQuery;
         console.log(`[RAG] No results, using cleaned query: "${cleanedQuery}"`);
       } else {
-        // Notify UI: No retrieval needed
+        // Notify UI: No retrieval needed, but still include memories
         mainWindow?.webContents.send('rag-status', {
           conversationId,
           status: 'skipped',
           message: ragResult.decision.reasoning || 'No retrieval needed'
         });
+        augmentedMessage = memoryContext + message;
         console.log(`[RAG] Skipped: ${ragResult.decision.reasoning}`);
       }
     } catch (ragError: unknown) {
-      // RAG errors are non-blocking - log and continue with original message
+      // RAG errors are non-blocking - log and continue with memories only
       const errorMessage = ragError instanceof Error ? ragError.message : String(ragError);
       console.error('[RAG] Processing error (continuing without RAG):', errorMessage);
       mainWindow?.webContents.send('rag-status', {
@@ -885,9 +955,13 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
         status: 'error',
         message: 'RAG unavailable'
       });
+      augmentedMessage = memoryContext + message;
     }
+  } else if (memoryContext) {
+    // RAG disabled but we have memories - still inject them
+    augmentedMessage = memoryContext + message;
   }
-  // === End RAG Processing ===
+  // === End Memory + RAG Processing ===
 
   await streamCompletion(orgId, conversationId, augmentedMessage, parentMessageUuid, (chunk) => {
     processSSEChunk(chunk, state, callbacks);
@@ -1056,6 +1130,75 @@ ipcMain.handle('rag-test-connection', async () => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[RAG] Connection test failed:', errorMessage);
+    return { success: false, error: errorMessage };
+  }
+});
+
+// ============================================================================
+// Memory Settings (Conversation Memory with Supabase)
+// ============================================================================
+
+// Get memory settings
+ipcMain.handle('memory-get-settings', async () => {
+  const stored = store.get('memorySettings') as MemorySettingsStore | undefined;
+  memorySettings = { ...DEFAULT_MEMORY_SETTINGS, ...stored };
+
+  // Initialize Supabase client if configured
+  if (memorySettings.supabaseUrl && memorySettings.supabaseAnonKey) {
+    initSupabaseClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+
+    // Initialize memory worker with current settings
+    initMemoryWorker({
+      enabled: memorySettings.enabled,
+      ollamaModel: ragSettings.model,
+      collectionName: knowledgeSettings.collectionName
+    });
+  }
+
+  return memorySettings;
+});
+
+// Save memory settings
+ipcMain.handle('memory-save-settings', async (_event, settings: Partial<MemorySettingsStore>) => {
+  memorySettings = { ...memorySettings, ...settings };
+  store.set('memorySettings', memorySettings);
+
+  // Reinitialize Supabase client if credentials changed
+  if (settings.supabaseUrl || settings.supabaseAnonKey) {
+    if (memorySettings.supabaseUrl && memorySettings.supabaseAnonKey) {
+      initSupabaseClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+    }
+  }
+
+  // Reinitialize worker with updated settings
+  initMemoryWorker({
+    enabled: memorySettings.enabled,
+    ollamaModel: ragSettings.model,
+    collectionName: knowledgeSettings.collectionName
+  });
+
+  console.log('[Memory] Settings saved:', { ...memorySettings, supabaseAnonKey: '***' });
+  return memorySettings;
+});
+
+// Test Supabase connection
+ipcMain.handle('memory-test-connection', async () => {
+  try {
+    if (!memorySettings.supabaseUrl || !memorySettings.supabaseAnonKey) {
+      return { success: false, error: 'Supabase URL and Anon Key are required' };
+    }
+
+    initSupabaseClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+    const result = await testSupabaseConnection();
+
+    if (result.success) {
+      return { success: true };
+    } else {
+      return { success: false, error: result.error };
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[Memory] Connection test failed:', errorMessage);
     return { success: false, error: errorMessage };
   }
 });
@@ -1637,6 +1780,27 @@ app.whenReady().then(() => {
   // Register spotlight shortcut from settings
   registerSpotlightShortcut();
 
+  // Initialize memory system if configured (non-blocking)
+  const memoryStored = store.get('memorySettings') as MemorySettingsStore | undefined;
+  if (memoryStored?.enabled && memoryStored?.supabaseUrl && memoryStored?.supabaseAnonKey) {
+    console.log('[Memory] Initializing memory system...');
+    memorySettings = { ...DEFAULT_MEMORY_SETTINGS, ...memoryStored };
+    initSupabaseClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+
+    // Initialize RAG settings for memory worker (needs Ollama model)
+    const ragStored = store.get('ragSettings') as RAGSettings | undefined;
+    const currentRagSettings = { ...DEFAULT_RAG_SETTINGS, ...ragStored };
+    const qdrantStored = store.get('knowledgeSettings') as KnowledgeSettingsStore | undefined;
+    const currentKnowledgeSettings = { ...DEFAULT_KNOWLEDGE_SETTINGS, ...qdrantStored };
+
+    initMemoryWorker({
+      enabled: memorySettings.enabled,
+      ollamaModel: currentRagSettings.model,
+      collectionName: currentKnowledgeSettings.collectionName
+    });
+    console.log('[Memory] Memory system initialized');
+  }
+
   // Auto-sync Notion on startup if configured
   const notionStored = store.get('notionSettings') as NotionSettingsStore | undefined;
   if (notionStored?.notionToken && notionStored?.syncOnStart) {
@@ -1710,9 +1874,15 @@ app.whenReady().then(() => {
   });
 });
 
-// Unregister shortcuts when app quits
-app.on('will-quit', () => {
+// Unregister shortcuts and flush memory buffer when app quits
+app.on('will-quit', async () => {
   globalShortcut.unregisterAll();
+
+  // Flush memory buffer before quitting (process any pending messages)
+  if (memorySettings.enabled) {
+    console.log('[Memory] Flushing buffer before quit...');
+    await flushBuffer();
+  }
 });
 
 app.on('window-all-closed', () => {

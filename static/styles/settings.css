@@ -596,3 +596,57 @@ body {
     color: rgba(255, 255, 255, 0.5);
   }
 }
+
+/* Memory Setup Guide */
+.memory-setup-guide {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(204, 120, 92, 0.08);
+  border-radius: 10px;
+  border: 1px solid rgba(204, 120, 92, 0.2);
+}
+
+.memory-setup-guide h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #CC785C;
+  margin-bottom: 12px;
+}
+
+.sql-code {
+  display: block;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 6px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  color: #1a1a1a;
+}
+
+/* Dark mode for memory settings */
+@media (prefers-color-scheme: dark) {
+  .memory-setup-guide {
+    background: rgba(204, 120, 92, 0.12);
+    border-color: rgba(204, 120, 92, 0.3);
+  }
+
+  .sql-code {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f0f0f0;
+  }
+
+  #memory-supabase-url,
+  #memory-supabase-key {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #f0f0f0;
+  }
+
+  #memory-status-text {
+    color: rgba(255, 255, 255, 0.6);
+  }
+}

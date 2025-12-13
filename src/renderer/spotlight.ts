@@ -27,8 +27,8 @@ const modeToggle = document.getElementById('mode-toggle');
 const modeToggleLabel = document.getElementById('mode-toggle-label');
 
 // State
-type SpotlightMode = 'chat' | 'speak';
-let currentMode: SpotlightMode = 'chat';
+type SpotlightMode = 'haiku' | 'opus' | 'tts';
+let currentMode: SpotlightMode = 'haiku';
 let isSpeaking = false;
 let isLoading = false;
 let currentMessageEl: HTMLElement | null = null;
@@ -252,7 +252,9 @@ async function sendMessage() {
   sendBtn.classList.remove('visible');
 
   try {
-    await claude.spotlightSend(message);
+    // Pass model based on current mode (haiku or opus)
+    const model = currentMode === 'opus' ? 'opus' : 'haiku';
+    await claude.spotlightSend(message, model);
   } catch (err: any) {
     if (currentResponseEl) {
       currentResponseEl.textContent = 'Error: ' + (err.message || 'Failed to get response');
@@ -314,13 +316,13 @@ async function speakText(text: string) {
 
 /**
  * Handle submit based on current mode.
- * Chat mode: sends to Claude. Speak mode: converts to speech.
+ * Haiku/Opus mode: sends to Claude with model. TTS mode: converts to speech.
  */
 async function handleSubmit() {
   const text = input.value.trim();
   if (!text) return;
 
-  if (currentMode === 'speak') {
+  if (currentMode === 'tts') {
     await speakText(text);
   } else {
     await sendMessage();
@@ -332,19 +334,26 @@ async function handleSubmit() {
 // ============================================================================
 
 /**
- * Toggle between Chat and TTS modes.
- * Chat = sends to Claude, TTS = text-to-speech only (no AI).
+ * Toggle between Haiku, Opus, and TTS modes.
+ * Haiku/Opus = sends to Claude with respective model, TTS = text-to-speech only (no AI).
  */
 modeToggle?.addEventListener('click', () => {
-  // Toggle mode state
-  currentMode = currentMode === 'chat' ? 'speak' : 'chat';
+  // Cycle: haiku → opus → tts → haiku
+  if (currentMode === 'haiku') {
+    currentMode = 'opus';
+  } else if (currentMode === 'opus') {
+    currentMode = 'tts';
+  } else {
+    currentMode = 'haiku';
+  }
 
   // Update button appearance (active = TTS mode)
-  modeToggle.classList.toggle('active', currentMode === 'speak');
+  modeToggle.classList.toggle('active', currentMode === 'tts');
 
   // Update label text
   if (modeToggleLabel) {
-    modeToggleLabel.textContent = currentMode === 'chat' ? 'Chat' : 'TTS';
+    const labels: Record<SpotlightMode, string> = { haiku: 'Haiku', opus: 'Opus', tts: 'TTS' };
+    modeToggleLabel.textContent = labels[currentMode];
   }
 
   // Keep focus on input for quick typing

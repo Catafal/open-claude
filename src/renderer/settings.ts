@@ -301,5 +301,121 @@ vibevoiceCheckBtn?.addEventListener('click', () => {
   checkVibeVoiceServer();
 });
 
+// ============================================================================
+// Memory Settings
+// ============================================================================
+
+// Memory DOM elements
+const memoryEnabledCheckbox = document.getElementById('memory-enabled') as HTMLInputElement;
+const memoryOptions = document.getElementById('memory-options') as HTMLElement;
+const memorySupabaseUrl = document.getElementById('memory-supabase-url') as HTMLInputElement;
+const memorySupabaseKey = document.getElementById('memory-supabase-key') as HTMLInputElement;
+const memoryStatusIndicator = document.getElementById('memory-status-indicator') as HTMLElement;
+const memoryStatusText = document.getElementById('memory-status-text') as HTMLElement;
+const memoryTestBtn = document.getElementById('memory-test-btn') as HTMLButtonElement;
+
+// Memory settings state
+interface MemorySettings {
+  enabled: boolean;
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+}
+
+let memorySettings: MemorySettings | null = null;
+
+/**
+ * Load memory settings from backend.
+ */
+async function loadMemorySettings() {
+  try {
+    memorySettings = await claude.memoryGetSettings();
+
+    if (memorySettings && memoryEnabledCheckbox) {
+      memoryEnabledCheckbox.checked = memorySettings.enabled;
+    }
+    if (memorySettings && memorySupabaseUrl) {
+      memorySupabaseUrl.value = memorySettings.supabaseUrl || '';
+    }
+    if (memorySettings && memorySupabaseKey) {
+      memorySupabaseKey.value = memorySettings.supabaseAnonKey || '';
+    }
+
+    // Update status indicator based on config
+    updateMemoryStatusDisplay();
+  } catch (error) {
+    console.error('Failed to load memory settings:', error);
+  }
+}
+
+/**
+ * Update memory status indicator display.
+ */
+function updateMemoryStatusDisplay() {
+  if (!memoryStatusIndicator || !memoryStatusText) return;
+
+  if (!memorySettings?.supabaseUrl || !memorySettings?.supabaseAnonKey) {
+    memoryStatusIndicator.className = 'status-indicator status-unknown';
+    memoryStatusText.textContent = 'Not configured';
+  } else if (!memorySettings.enabled) {
+    memoryStatusIndicator.className = 'status-indicator status-unknown';
+    memoryStatusText.textContent = 'Disabled';
+  }
+}
+
+/**
+ * Test memory (Supabase) connection.
+ */
+async function testMemoryConnection() {
+  if (!memoryStatusIndicator || !memoryStatusText) return;
+
+  // Set checking state
+  memoryStatusIndicator.className = 'status-indicator status-checking';
+  memoryStatusText.textContent = 'Testing...';
+
+  try {
+    const result = await claude.memoryTestConnection();
+
+    if (result.success) {
+      memoryStatusIndicator.className = 'status-indicator status-connected';
+      memoryStatusText.textContent = 'Connected';
+    } else {
+      memoryStatusIndicator.className = 'status-indicator status-disconnected';
+      memoryStatusText.textContent = result.error || 'Connection failed';
+    }
+  } catch (error) {
+    memoryStatusIndicator.className = 'status-indicator status-disconnected';
+    memoryStatusText.textContent = 'Connection failed';
+  }
+}
+
+// Memory enabled toggle
+memoryEnabledCheckbox?.addEventListener('change', async () => {
+  if (!memorySettings) return;
+  memorySettings = await claude.memorySaveSettings({ enabled: memoryEnabledCheckbox.checked });
+  updateMemoryStatusDisplay();
+});
+
+// Memory Supabase URL - save on blur
+memorySupabaseUrl?.addEventListener('blur', async () => {
+  if (!memorySettings) return;
+  memorySettings = await claude.memorySaveSettings({ supabaseUrl: memorySupabaseUrl.value });
+  updateMemoryStatusDisplay();
+});
+
+// Memory Supabase Key - save on blur
+memorySupabaseKey?.addEventListener('blur', async () => {
+  if (!memorySettings) return;
+  memorySettings = await claude.memorySaveSettings({ supabaseAnonKey: memorySupabaseKey.value });
+  updateMemoryStatusDisplay();
+});
+
+// Memory test connection button
+memoryTestBtn?.addEventListener('click', () => {
+  testMemoryConnection();
+});
+
 // Load settings on page load
-window.addEventListener('load', loadSettings);
+window.addEventListener('load', () => {
+  loadSettings();
+  loadMemorySettings();
+});

@@ -2586,6 +2586,45 @@
         </div>
       </div>
 
+      <!-- Memory Section (collapsible) -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="memory">
+          <span class="section-icon">🧠</span>
+          <span class="section-title">Memory</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="memory-section">
+          <div class="setting-item setting-item-row">
+            <div class="setting-info">
+              <label>Enable Memory</label>
+              <span class="setting-description">Remember context from conversations using Supabase</span>
+            </div>
+            <label class="settings-toggle">
+              <input type="checkbox" id="settings-memory-enabled">
+              <span class="settings-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Supabase URL</label>
+              <span class="setting-description">Your Supabase project URL</span>
+            </div>
+            <input type="text" id="settings-memory-supabase-url" class="text-input" placeholder="https://xxx.supabase.co">
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Supabase Anon Key</label>
+              <span class="setting-description">Your project's anon/public key</span>
+            </div>
+            <input type="password" id="settings-memory-supabase-key" class="text-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+          </div>
+          <div class="setting-item setting-actions">
+            <button id="memory-test-connection" class="btn btn-secondary">Test Connection</button>
+            <span id="memory-connection-status" class="status-text"></span>
+          </div>
+        </div>
+      </div>
+
       <!-- About Section (collapsible) -->
       <div class="settings-section">
         <button class="settings-section-header" data-section="about">

@@ -38,10 +38,14 @@ export const DEFAULT_NOTION_SETTINGS: NotionSettings = {
 export interface KnowledgeMetadata {
   source: string;           // File path or URL
   filename: string;         // Display name
-  type: 'txt' | 'md' | 'pdf' | 'url' | 'notion';
+  type: 'txt' | 'md' | 'pdf' | 'url' | 'notion' | 'memory';
   chunkIndex: number;       // Position in chunked document
   totalChunks: number;      // Total chunks from source
   dateAdded: string;        // ISO timestamp
+  // Memory-specific fields (optional, only for type='memory')
+  category?: 'factual' | 'preference' | 'relationship' | 'temporal';
+  importance?: number;
+  source_type?: 'spotlight' | 'main_chat';
 }
 
 // A single knowledge item (chunk) with its embedding

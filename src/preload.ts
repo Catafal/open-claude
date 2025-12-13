@@ -85,7 +85,7 @@ contextBridge.exposeInMainWorld('claude', {
 
   // Spotlight functions
   spotlightResize: (height: number) => ipcRenderer.invoke('spotlight-resize', height),
-  spotlightSend: (message: string) => ipcRenderer.invoke('spotlight-send', message),
+  spotlightSend: (message: string, model?: string) => ipcRenderer.invoke('spotlight-send', message, model),
   onSpotlightStream: (callback: (data: { text: string; fullText: string }) => void) => {
     ipcRenderer.on('spotlight-stream', (_event, data) => callback(data));
   },
@@ -189,4 +189,10 @@ contextBridge.exposeInMainWorld('claude', {
   ragSaveSettings: (settings: { enabled?: boolean; ollamaUrl?: string; model?: string; maxQueries?: number; maxContextChunks?: number; minRelevanceScore?: number }) =>
     ipcRenderer.invoke('rag-save-settings', settings),
   ragTestConnection: () => ipcRenderer.invoke('rag-test-connection'),
+
+  // Memory Settings (Conversation memory with Supabase)
+  memoryGetSettings: () => ipcRenderer.invoke('memory-get-settings'),
+  memorySaveSettings: (settings: { enabled?: boolean; supabaseUrl?: string; supabaseAnonKey?: string }) =>
+    ipcRenderer.invoke('memory-save-settings', settings),
+  memoryTestConnection: () => ipcRenderer.invoke('memory-test-connection'),
 });

@@ -5,12 +5,12 @@
   "description": "Open Claude - A custom Claude client",
   "repository": {
     "type": "git",
-    "url": "https://github.com/catafal/open-claude" 
+    "url": "https://github.com/catafal/open-claude"
   },
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc && pnpm run build:renderer",
-    "build:renderer": "esbuild src/renderer/main.ts --bundle --outfile=static/js/main.js --format=esm --platform=browser && esbuild src/renderer/spotlight.ts --bundle --outfile=static/js/spotlight.js --format=esm --platform=browser",
+    "build:renderer": "esbuild src/renderer/main.ts --bundle --outfile=static/js/main.js --format=esm --platform=browser && esbuild src/renderer/spotlight.ts --bundle --outfile=static/js/spotlight.js --format=esm --platform=browser && esbuild src/renderer/settings.ts --bundle --outfile=static/js/settings.js --format=esm --platform=browser",
     "start": "pnpm run build && electron .",
     "dev": "pnpm run build && electron .",
     "pack": "pnpm run build && electron-builder --dir",
@@ -30,7 +30,9 @@
       {
         "from": "scripts/",
         "to": "scripts/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "mac": {
@@ -57,6 +59,7 @@
     "@mendable/firecrawl-js": "^4.8.3",
     "@notionhq/client": "^5.4.0",
     "@qdrant/js-client-rest": "^1.11.0",
+    "@supabase/supabase-js": "^2.87.1",
     "@xenova/transformers": "^2.17.2",
     "cheerio": "^1.0.0",
     "electron-store": "^11.0.2",

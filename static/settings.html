@@ -129,6 +129,91 @@
         </div>
       </div>
 
+      <!-- Memory Settings Section -->
+      <div class="settings-section">
+        <h2>Memory</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Enable Memory</label>
+            <span class="setting-description">Remember context from conversations using Supabase</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="memory-enabled">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div id="memory-options">
+          <!-- Connection Status -->
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Connection Status</label>
+              <span class="setting-description">Supabase database connection</span>
+            </div>
+            <div class="server-status">
+              <span id="memory-status-indicator" class="status-indicator status-unknown"></span>
+              <span id="memory-status-text">Not configured</span>
+              <button id="memory-test-btn" class="btn-small">Test</button>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="memory-supabase-url">Supabase URL</label>
+              <span class="setting-description">Your Supabase project URL</span>
+            </div>
+            <input type="text" id="memory-supabase-url" placeholder="https://xxx.supabase.co">
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="memory-supabase-key">Supabase Anon Key</label>
+              <span class="setting-description">Your project's anon/public key</span>
+            </div>
+            <input type="password" id="memory-supabase-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+          </div>
+
+          <!-- Setup Guide -->
+          <div class="memory-setup-guide">
+            <h3>Setup Guide</h3>
+            <div class="setup-steps">
+              <div class="setup-step">
+                <span class="step-number">1</span>
+                <div class="step-content">
+                  <strong>Create Supabase Project</strong>
+                  <span class="step-hint">Go to supabase.com and create a new project</span>
+                </div>
+              </div>
+              <div class="setup-step">
+                <span class="step-number">2</span>
+                <div class="step-content">
+                  <strong>Create memories table</strong>
+                  <code>Run in SQL Editor:</code>
+                  <pre class="sql-code">CREATE TABLE memories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content TEXT NOT NULL,
+  category TEXT NOT NULL,
+  importance FLOAT DEFAULT 0.5,
+  source_type TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  expires_at TIMESTAMP
+);</pre>
+                </div>
+              </div>
+              <div class="setup-step">
+                <span class="step-number">3</span>
+                <div class="step-content">
+                  <strong>Copy credentials</strong>
+                  <span class="step-hint">Project Settings → API → URL and anon key</span>
+                </div>
+              </div>
+            </div>
+            <p class="setup-note">Memories are extracted from conversations every 10 minutes and stored securely in your Supabase database.</p>
+          </div>
+        </div>
+      </div>
+
       <!-- About Section -->
       <div class="settings-section">
         <h2>About</h2>

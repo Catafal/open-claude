@@ -44,6 +44,29 @@ export interface RAGSettingsStore {
   minRelevanceScore: number;
 }
 
+// Memory settings (for StoreSchema)
+export interface MemorySettingsStore {
+  enabled: boolean;
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+}
+
+// Memory types for extraction and storage
+export type MemoryCategory = 'factual' | 'preference' | 'relationship' | 'temporal';
+
+export interface ExtractedMemory {
+  content: string;
+  category: MemoryCategory;
+  importance: number;  // 0.0 - 1.0
+}
+
+export interface StoredMemory extends ExtractedMemory {
+  id: string;
+  source_type: 'spotlight' | 'main_chat';
+  created_at: string;
+  expires_at?: string;  // For temporal memories
+}
+
 // Store schema for electron-store
 export interface StoreSchema {
   orgId?: string;
@@ -53,6 +76,7 @@ export interface StoreSchema {
   knowledgeSettings?: KnowledgeSettingsStore;
   notionSettings?: NotionSettingsStore;
   ragSettings?: RAGSettingsStore;
+  memorySettings?: MemorySettingsStore;
 }
 
 // File attachment payloads
