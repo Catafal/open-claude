@@ -220,3 +220,234 @@ export async function cleanupExpiredMemories(): Promise<number> {
     return 0;
   }
 }
+
+// =============================================================================
+// Memory Improvement Functions (deduplication, decay, access tracking)
+// =============================================================================
+
+/**
+ * Update an existing memory's content and/or importance.
+ */
+export async function updateMemory(
+  id: string,
+  updates: { content?: string; importance?: number }
+): Promise<boolean> {
+  try {
+    const client = getClient();
+
+    const { error } = await client
+      .from('memories')
+      .update({
+        ...updates,
+        last_accessed: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error('[Memory] Failed to update memory:', error.message);
+      return false;
+    }
+
+    console.log(`[Memory] Updated memory: ${id}`);
+    return true;
+  } catch (err: unknown) {
+    console.error('[Memory] Error updating memory:', err);
+    return false;
+  }
+}
+
+/**
+ * Track memory access - update last_accessed timestamp.
+ * Called when memories are retrieved for context injection.
+ * Note: access_count increment would require raw SQL or RPC function.
+ */
+export async function trackMemoryAccess(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+
+  try {
+    const client = getClient();
+
+    // Update last_accessed for all retrieved memories
+    await client
+      .from('memories')
+      .update({ last_accessed: new Date().toISOString() })
+      .in('id', ids);
+
+  } catch (err: unknown) {
+    console.error('[Memory] Error tracking access:', err);
+  }
+}
+
+/**
+ * Boost importance of an existing memory (when duplicate detected).
+ * Increases by 0.1, capped at 1.0.
+ */
+export async function boostImportance(id: string): Promise<boolean> {
+  try {
+    const client = getClient();
+
+    // First get current importance
+    const { data: existing } = await client
+      .from('memories')
+      .select('importance')
+      .eq('id', id)
+      .single();
+
+    if (!existing) return false;
+
+    const newImportance = Math.min(1.0, (existing.importance || 0.5) + 0.1);
+
+    const { error } = await client
+      .from('memories')
+      .update({
+        importance: newImportance,
+        last_accessed: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error('[Memory] Failed to boost importance:', error.message);
+      return false;
+    }
+
+    console.log(`[Memory] Boosted importance of ${id} to ${newImportance}`);
+    return true;
+  } catch (err: unknown) {
+    console.error('[Memory] Error boosting importance:', err);
+    return false;
+  }
+}
+
+/**
+ * Mark a memory as superseded by another (for contradiction resolution).
+ */
+export async function markSuperseded(oldId: string, newId: string): Promise<boolean> {
+  try {
+    const client = getClient();
+
+    const { error } = await client
+      .from('memories')
+      .update({ superseded_by: newId })
+      .eq('id', oldId);
+
+    if (error) {
+      console.error('[Memory] Failed to mark superseded:', error.message);
+      return false;
+    }
+
+    console.log(`[Memory] Marked ${oldId} as superseded by ${newId}`);
+    return true;
+  } catch (err: unknown) {
+    console.error('[Memory] Error marking superseded:', err);
+    return false;
+  }
+}
+
+/**
+ * Decay importance of memories not accessed recently.
+ * Multiplies importance by decay factor for memories not accessed in last 7 days.
+ * @returns Number of memories decayed
+ */
+export async function decayImportance(decayFactor: number = 0.95): Promise<number> {
+  try {
+    const client = getClient();
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // Get memories to decay
+    const { data: toDecay, error: fetchError } = await client
+      .from('memories')
+      .select('id, importance')
+      .lt('last_accessed', sevenDaysAgo.toISOString())
+      .gt('importance', 0.1)
+      .is('superseded_by', null);
+
+    if (fetchError || !toDecay) {
+      console.error('[Memory] Failed to fetch memories for decay:', fetchError?.message);
+      return 0;
+    }
+
+    // Update each memory's importance
+    let decayedCount = 0;
+    for (const memory of toDecay) {
+      const newImportance = Math.max(0.05, memory.importance * decayFactor);
+      const { error } = await client
+        .from('memories')
+        .update({ importance: newImportance })
+        .eq('id', memory.id);
+
+      if (!error) decayedCount++;
+    }
+
+    if (decayedCount > 0) {
+      console.log(`[Memory] Decayed importance of ${decayedCount} memories`);
+    }
+    return decayedCount;
+  } catch (err: unknown) {
+    console.error('[Memory] Error decaying importance:', err);
+    return 0;
+  }
+}
+
+/**
+ * Prune low-importance, stale memories.
+ * Deletes memories with importance < minImportance that haven't been accessed in staleDays.
+ * @returns Number of memories pruned
+ */
+export async function pruneMemories(
+  minImportance: number = 0.1,
+  staleDays: number = 90
+): Promise<number> {
+  try {
+    const client = getClient();
+
+    const staleDate = new Date();
+    staleDate.setDate(staleDate.getDate() - staleDays);
+
+    const { data, error } = await client
+      .from('memories')
+      .delete()
+      .lt('importance', minImportance)
+      .lt('last_accessed', staleDate.toISOString())
+      .is('superseded_by', null)  // Don't delete historical records
+      .select('id');
+
+    if (error) {
+      console.error('[Memory] Failed to prune memories:', error.message);
+      return 0;
+    }
+
+    const count = data?.length || 0;
+    if (count > 0) {
+      console.log(`[Memory] Pruned ${count} low-importance stale memories`);
+    }
+    return count;
+  } catch (err: unknown) {
+    console.error('[Memory] Error pruning memories:', err);
+    return 0;
+  }
+}
+
+/**
+ * Get a memory by ID.
+ */
+export async function getMemoryById(id: string): Promise<StoredMemory | null> {
+  try {
+    const client = getClient();
+
+    const { data, error } = await client
+      .from('memories')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      return null;
+    }
+
+    return data as StoredMemory;
+  } catch {
+    return null;
+  }
+}

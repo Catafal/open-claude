@@ -46,6 +46,9 @@ export interface KnowledgeMetadata {
   category?: 'factual' | 'preference' | 'relationship' | 'temporal';
   importance?: number;
   source_type?: 'spotlight' | 'main_chat';
+  created_at?: string;      // For recency boost calculations
+  // Index signature for flexible metadata access
+  [key: string]: string | number | undefined;
 }
 
 // A single knowledge item (chunk) with its embedding

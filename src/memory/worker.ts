@@ -13,7 +13,8 @@ import {
   getDominantSource
 } from './buffer';
 import { extractMemories } from './extractor';
-import { saveMemory, cleanupExpiredMemories } from './supabase';
+import { saveMemory, cleanupExpiredMemories, boostImportance, markSuperseded } from './supabase';
+import { consolidateMemory } from './consolidation';
 import { generateEmbedding } from '../knowledge/embeddings';
 import { upsertVectors, getQdrantClient, ensureCollection } from '../knowledge/qdrant';
 import type { ExtractedMemory } from '../types';
@@ -139,24 +140,52 @@ export async function processBuffer(): Promise<void> {
 }
 
 /**
- * Process a single memory: save to Supabase and embed in Qdrant.
+ * Process a single memory: check consolidation, then save to Supabase and embed in Qdrant.
  */
 async function processMemory(
   memory: ExtractedMemory,
   sourceType: 'spotlight' | 'main_chat'
 ): Promise<void> {
   try {
-    // Save to Supabase
+    // Step 1: Check for duplicates/conflicts via consolidation
+    const consolidation = await consolidateMemory(memory, collectionName, ollamaModel);
+
+    switch (consolidation.action) {
+      case 'skip':
+        // Duplicate detected - boost existing memory's importance instead
+        console.log(`[Memory Worker] Skipping duplicate: ${memory.content.substring(0, 40)}...`);
+        if (consolidation.existingId) {
+          await boostImportance(consolidation.existingId);
+        }
+        return;
+
+      case 'supersede':
+        // Contradiction detected - store new and mark old as superseded
+        console.log(`[Memory Worker] Superseding old memory: ${consolidation.existingId}`);
+        break;
+
+      case 'store':
+      default:
+        // New distinct memory - proceed with normal storage
+        break;
+    }
+
+    // Step 2: Save to Supabase
     const savedMemory = await saveMemory(memory, sourceType);
     if (!savedMemory) {
       console.error('[Memory Worker] Failed to save memory to Supabase');
       return;
     }
 
-    // Generate embedding
+    // Step 3: If superseding, mark old memory
+    if (consolidation.action === 'supersede' && consolidation.existingId) {
+      await markSuperseded(consolidation.existingId, savedMemory.id);
+    }
+
+    // Step 4: Generate embedding
     const embedding = await generateEmbedding(memory.content);
 
-    // Ensure collection exists
+    // Step 5: Ensure Qdrant collection exists
     try {
       getQdrantClient();
       await ensureCollection(collectionName);
@@ -165,7 +194,7 @@ async function processMemory(
       return;
     }
 
-    // Store in Qdrant with memory-specific metadata
+    // Step 6: Store in Qdrant with memory-specific metadata
     await upsertVectors(collectionName, [{
       id: savedMemory.id,
       content: memory.content,
@@ -177,6 +206,7 @@ async function processMemory(
         chunkIndex: 0,
         totalChunks: 1,
         dateAdded: savedMemory.created_at,
+        created_at: savedMemory.created_at,  // For recency boost
         category: memory.category,
         importance: memory.importance,
         source_type: sourceType

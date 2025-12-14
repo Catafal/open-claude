@@ -51,7 +51,8 @@ import {
   addConversationPair,
   scheduleProcessing,
   flushBuffer,
-  getMemoriesForContext
+  getMemoriesForContext,
+  runMaintenance
 } from './memory';
 import type { MemorySettingsStore } from './types';
 import { checkForUpdatesAndNotify } from './updater';
@@ -2027,6 +2028,23 @@ app.whenReady().then(() => {
       collectionName: currentKnowledgeSettings.collectionName
     });
     console.log('[Memory] Memory system initialized');
+
+    // Schedule daily maintenance (decay + pruning)
+    const MAINTENANCE_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+    setInterval(async () => {
+      if (memorySettings.enabled) {
+        const result = await runMaintenance();
+        console.log(`[Memory Maintenance] Daily run - Decayed: ${result.decayed}, Pruned: ${result.pruned}`);
+      }
+    }, MAINTENANCE_INTERVAL);
+
+    // Run maintenance on startup (after 5 minute delay, non-blocking)
+    setTimeout(async () => {
+      if (memorySettings.enabled) {
+        console.log('[Memory Maintenance] Running startup maintenance...');
+        await runMaintenance();
+      }
+    }, 5 * 60 * 1000);
   }
 
   // Auto-sync Notion on startup if configured

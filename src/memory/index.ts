@@ -50,3 +50,6 @@ export {
   getMemoriesForContext,
   type MemorySearchResult
 } from './retrieval';
+
+// Maintenance (decay, pruning)
+export { runMaintenance, type MaintenanceResult } from './maintenance';

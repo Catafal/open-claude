@@ -12,13 +12,20 @@ CREATE TABLE IF NOT EXISTS memories (
   importance FLOAT DEFAULT 0.5 CHECK (importance >= 0 AND importance <= 1),
   source_type TEXT CHECK (source_type IN ('spotlight', 'main_chat')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  expires_at TIMESTAMPTZ  -- Only used for 'temporal' category (auto-expires after 7 days)
+  expires_at TIMESTAMPTZ,  -- Only used for 'temporal' category (auto-expires after 7 days)
+  -- Memory improvement columns
+  last_accessed TIMESTAMPTZ DEFAULT NOW(),  -- For recency boost and decay
+  access_count INTEGER DEFAULT 0,           -- Track how often memory is retrieved
+  superseded_by UUID REFERENCES memories(id) -- Points to newer memory if contradicted
 );
 
 -- 2. Create indexes for faster queries
 CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category);
 CREATE INDEX IF NOT EXISTS idx_memories_created_at ON memories(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memories_expires_at ON memories(expires_at) WHERE expires_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance);
+CREATE INDEX IF NOT EXISTS idx_memories_last_accessed ON memories(last_accessed);
+CREATE INDEX IF NOT EXISTS idx_memories_superseded ON memories(superseded_by) WHERE superseded_by IS NOT NULL;
 
 -- 3. Enable Row Level Security (recommended for production)
 ALTER TABLE memories ENABLE ROW LEVEL SECURITY;

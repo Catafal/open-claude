@@ -3,10 +3,12 @@
  *
  * Queries Qdrant for relevant memories and formats them for prompt injection.
  * Returns memories as a separate XML section from knowledge context.
+ * Includes recency boost and access tracking for memory improvements.
  */
 
 import { generateEmbedding } from '../knowledge/embeddings';
 import { searchVectors, getQdrantClient } from '../knowledge/qdrant';
+import { trackMemoryAccess } from './supabase';
 import type { MemoryCategory } from '../types';
 
 // Memory search result
@@ -15,7 +17,20 @@ export interface MemorySearchResult {
   content: string;
   category: MemoryCategory;
   importance: number;
-  score: number;
+  score: number;  // Combined score (semantic + importance + recency)
+  createdAt?: string;
+}
+
+/**
+ * Calculate recency factor (0.5 to 1.0 based on age).
+ * Newer memories get higher scores.
+ */
+function getRecencyFactor(createdAt?: string): number {
+  if (!createdAt) return 0.7; // Default for unknown dates
+
+  const ageInDays = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24);
+  // 1.0 for today, decays to 0.5 for 30+ days old
+  return Math.max(0.5, 1 - (ageInDays / 60));
 }
 
 /**
@@ -48,32 +63,44 @@ export async function searchMemories(
     // Search in Qdrant - get more than limit to filter memories
     const results = await searchVectors(collectionName, queryVector, limit * 3);
 
-    // Filter to only memories (type: 'memory' in metadata)
+    // Filter to only memories and calculate combined scores
     const memoryResults = results
       .filter(r => {
-        const payload = r.metadata as any;
+        const payload = r.metadata as Record<string, unknown>;
         // Check if this is a memory (has category field or source starts with 'memory:')
-        return payload?.category || payload?.source?.startsWith('memory:');
+        return payload?.category || (payload?.source as string)?.startsWith('memory:');
       })
       .filter(r => r.score >= minScore)
-      .slice(0, limit)
       .map(r => {
-        const payload = r.metadata as any;
+        const payload = r.metadata as Record<string, unknown>;
+        const semanticScore = r.score;
+        const importance = (payload?.importance as number) || 0.5;
+        const createdAt = payload?.created_at as string | undefined;
+        const recencyFactor = getRecencyFactor(createdAt);
+
+        // Combined score: semantic 50%, importance 25%, recency 25%
+        const combinedScore = semanticScore * 0.5 + importance * 0.25 + recencyFactor * 0.25;
+
         return {
           id: r.id,
           content: r.content,
           category: (payload?.category || 'factual') as MemoryCategory,
-          importance: payload?.importance || 0.5,
-          score: r.score
+          importance,
+          score: combinedScore,
+          createdAt
         };
-      });
+      })
+      // Sort by combined score (highest first)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
 
-    // Sort by combined score (relevance * importance)
-    memoryResults.sort((a, b) => {
-      const scoreA = a.score * (0.5 + a.importance * 0.5);
-      const scoreB = b.score * (0.5 + b.importance * 0.5);
-      return scoreB - scoreA;
-    });
+    // Track access for retrieved memories (async, don't wait)
+    if (memoryResults.length > 0) {
+      const ids = memoryResults.map(m => m.id);
+      trackMemoryAccess(ids).catch(err => {
+        console.error('[Memory Retrieval] Failed to track access:', err);
+      });
+    }
 
     console.log(`[Memory Retrieval] Found ${memoryResults.length} relevant memories`);
     return memoryResults;
