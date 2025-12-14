@@ -43,3 +43,16 @@ export {
   fetchPageMeta,
   fetchChildPages
 } from './notion';
+
+// Knowledge Supabase registry (document metadata storage)
+export {
+  initKnowledgeSupabase,
+  isKnowledgeSupabaseReady,
+  registerDocument,
+  unregisterDocument,
+  listDocuments,
+  updateDocumentChunkCount,
+  testKnowledgeTable,
+  clearAllDocuments,
+  type KnowledgeDocument
+} from './knowledge-supabase';

@@ -910,6 +910,19 @@ body {
   }
 }
 
+/* Setting divider (horizontal line between sections) */
+.setting-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 16px 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .setting-divider {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
 /* Knowledge Content Layout */
 .knowledge-content {
   padding: 16px 24px;

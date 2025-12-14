@@ -656,6 +656,9 @@ function initSettingsUI() {
   // Cloud Sync: Pull and Push buttons
   $('settings-sync-pull')?.addEventListener('click', pullSettingsFromCloud);
   $('settings-sync-push')?.addEventListener('click', pushSettingsToCloud);
+
+  // Knowledge Migration button
+  $('knowledge-migrate-btn')?.addEventListener('click', migrateKnowledgeToCloud);
 }
 
 function showSettings() {
@@ -933,6 +936,8 @@ async function checkCloudSyncStatus() {
   const status = $('settings-sync-status') as HTMLElement;
   const pullBtn = $('settings-sync-pull') as HTMLButtonElement;
   const pushBtn = $('settings-sync-push') as HTMLButtonElement;
+  const migrateBtn = $('knowledge-migrate-btn') as HTMLButtonElement;
+  const knowledgeStatus = $('knowledge-sync-status') as HTMLElement;
   if (!status || !pullBtn || !pushBtn) return;
 
   status.textContent = 'Checking...';
@@ -954,8 +959,17 @@ async function checkCloudSyncStatus() {
       status.className = 'status-text';
     }
 
-    // Always allow push
+    // Always allow push when connected
     pushBtn.disabled = false;
+
+    // Enable knowledge migration when Supabase is connected
+    if (migrateBtn) {
+      migrateBtn.disabled = false;
+    }
+    if (knowledgeStatus) {
+      knowledgeStatus.textContent = 'Ready to migrate';
+      knowledgeStatus.className = 'status-text';
+    }
   } catch (error) {
     status.textContent = 'Sync error';
     status.className = 'status-text error';
@@ -1021,6 +1035,37 @@ async function pushSettingsToCloud() {
     status.className = 'status-text error';
   } finally {
     pushBtn.disabled = false;
+  }
+}
+
+/**
+ * Migrate knowledge documents from Qdrant to Supabase registry.
+ */
+async function migrateKnowledgeToCloud() {
+  const status = $('knowledge-sync-status') as HTMLElement;
+  const migrateBtn = $('knowledge-migrate-btn') as HTMLButtonElement;
+  if (!status || !migrateBtn) return;
+
+  migrateBtn.disabled = true;
+  status.textContent = 'Migrating...';
+
+  try {
+    const result = await window.claude.knowledgeMigrateToSupabase?.();
+
+    if (result?.success) {
+      status.textContent = `Migrated ${result.documentsMigrated} docs`;
+      status.className = 'status-text success';
+      // Reload knowledge list to show from Supabase
+      await loadKnowledgeItems();
+    } else {
+      status.textContent = result?.error || 'Migration failed';
+      status.className = 'status-text error';
+    }
+  } catch (error) {
+    status.textContent = 'Migration failed';
+    status.className = 'status-text error';
+  } finally {
+    migrateBtn.disabled = false;
   }
 }
 

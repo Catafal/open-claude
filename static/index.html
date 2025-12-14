@@ -2651,6 +2651,24 @@
           <div class="setting-item">
             <span class="setting-description sync-note">Local settings always take priority. Use "Push" to backup, "Pull" to restore.</span>
           </div>
+
+          <div class="setting-divider"></div>
+
+          <div class="setting-item setting-item-row">
+            <div class="setting-info">
+              <label>Knowledge Registry</label>
+              <span class="setting-description">Migrate document list to Supabase for cross-device sync</span>
+            </div>
+            <span id="knowledge-sync-status" class="status-text">Not migrated</span>
+          </div>
+          <div class="setting-item setting-actions">
+            <button id="knowledge-migrate-btn" class="btn btn-secondary" disabled>
+              📤 Migrate to Cloud
+            </button>
+          </div>
+          <div class="setting-item">
+            <span class="setting-description sync-note">One-time migration of your document list from local to cloud storage.</span>
+          </div>
         </div>
       </div>
 

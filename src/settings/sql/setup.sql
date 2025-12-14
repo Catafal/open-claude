@@ -68,3 +68,48 @@ CREATE POLICY "Allow all for anon" ON user_settings
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_user_settings_updated_at
   ON user_settings(updated_at DESC);
+
+-- ============================================================
+-- Knowledge Documents Registry
+-- ============================================================
+-- Stores metadata about ingested documents (files, URLs, Notion pages).
+-- Actual content/embeddings are in Qdrant; this is the fast-lookup registry.
+-- Enables cross-device sync without scanning Qdrant.
+
+CREATE TABLE IF NOT EXISTS knowledge_documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source TEXT NOT NULL UNIQUE,  -- File path or URL (unique identifier)
+  title TEXT NOT NULL,          -- Display name
+  type TEXT NOT NULL CHECK (type IN ('txt', 'md', 'pdf', 'url', 'notion')),
+  chunk_count INT NOT NULL DEFAULT 0,
+  date_added TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Generic updated_at trigger function (reusable)
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_knowledge_documents_updated_at ON knowledge_documents;
+
+CREATE TRIGGER update_knowledge_documents_updated_at
+  BEFORE UPDATE ON knowledge_documents
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE knowledge_documents ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all for anon knowledge" ON knowledge_documents;
+
+CREATE POLICY "Allow all for anon knowledge" ON knowledge_documents
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_date
+  ON knowledge_documents(date_added DESC);

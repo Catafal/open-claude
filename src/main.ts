@@ -26,6 +26,12 @@ import {
   extractPageIdFromUrl,
   fetchPageMeta,
   fetchChildPages,
+  // Knowledge Supabase registry
+  initKnowledgeSupabase,
+  isKnowledgeSupabaseReady,
+  registerDocument,
+  unregisterDocument,
+  listDocuments,
   type KnowledgeSettings,
   type NotionSettings,
   type KnowledgeItem
@@ -1174,6 +1180,8 @@ ipcMain.handle('memory-save-settings', async (_event, settings: Partial<MemorySe
   if (settings.supabaseUrl || settings.supabaseAnonKey) {
     if (memorySettings.supabaseUrl && memorySettings.supabaseAnonKey) {
       initSupabaseClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+      // Also init Knowledge Supabase registry (uses same credentials)
+      initKnowledgeSupabase(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
     }
   }
 
@@ -1366,6 +1374,16 @@ ipcMain.handle('knowledge-ingest-file', async (_event, filePath: string) => {
       console.log(`[Knowledge] Upserted batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(items.length / BATCH_SIZE)}`);
     }
 
+    // Register document in Supabase registry (if connected)
+    if (isKnowledgeSupabaseReady()) {
+      await registerDocument(
+        doc.metadata.source!,
+        doc.metadata.filename!,
+        doc.metadata.type! as 'txt' | 'md' | 'pdf' | 'url' | 'notion',
+        items.length
+      );
+    }
+
     console.log(`[Knowledge] Ingested ${items.length} chunks from ${filePath}`);
     return { success: true, chunksIngested: items.length };
   } catch (error: any) {
@@ -1415,6 +1433,16 @@ ipcMain.handle('knowledge-ingest-url', async (_event, url: string) => {
       console.log(`[Knowledge] Upserted batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(items.length / BATCH_SIZE)}`);
     }
 
+    // Register document in Supabase registry (if connected)
+    if (isKnowledgeSupabaseReady()) {
+      await registerDocument(
+        doc.metadata.source!,
+        doc.metadata.filename!,
+        doc.metadata.type! as 'txt' | 'md' | 'pdf' | 'url' | 'notion',
+        items.length
+      );
+    }
+
     console.log(`[Knowledge] Ingested ${items.length} chunks from ${url}`);
     return { success: true, chunksIngested: items.length };
   } catch (error: any) {
@@ -1443,8 +1471,28 @@ ipcMain.handle('knowledge-search', async (_event, query: string, limit: number =
 ipcMain.handle('knowledge-list', async () => {
   console.log('[Knowledge] IPC: knowledge-list called');
   try {
+    // Prefer Supabase registry (faster, cross-device sync)
+    if (isKnowledgeSupabaseReady()) {
+      const docs = await listDocuments();
+      console.log(`[Knowledge] IPC: knowledge-list returning ${docs.length} documents from Supabase`);
+      // Transform to format expected by UI (KnowledgeItem-like)
+      return docs.map(doc => ({
+        id: doc.id,
+        content: '',  // UI only needs metadata for card display
+        metadata: {
+          source: doc.source,
+          filename: doc.title,
+          type: doc.type,
+          chunkIndex: 0,
+          totalChunks: doc.chunk_count,
+          dateAdded: doc.date_added
+        }
+      }));
+    }
+
+    // Fallback: scroll Qdrant (slower, but works without Supabase)
     const items = await listItems(knowledgeSettings.collectionName);
-    console.log(`[Knowledge] IPC: knowledge-list returning ${items.length} items`);
+    console.log(`[Knowledge] IPC: knowledge-list returning ${items.length} items from Qdrant`);
     return items;
   } catch (error: any) {
     console.error('[Knowledge] List error:', error.message);
@@ -1468,12 +1516,68 @@ ipcMain.handle('knowledge-delete', async (_event, ids: string[]) => {
 ipcMain.handle('knowledge-delete-by-source', async (_event, source: string) => {
   console.log(`[Knowledge] IPC: knowledge-delete-by-source called with source="${source}"`);
   try {
+    // Delete chunks from Qdrant
     const deletedCount = await deleteBySource(knowledgeSettings.collectionName, source);
     console.log(`[Knowledge] Deleted ${deletedCount} items with source: ${source}`);
+
+    // Unregister from Supabase registry (if connected)
+    if (isKnowledgeSupabaseReady()) {
+      await unregisterDocument(source);
+    }
+
     return { success: true, deletedCount };
   } catch (error: any) {
     console.error('[Knowledge] Delete by source error:', error.message);
     console.error('[Knowledge] Full error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Migrate existing Qdrant documents to Supabase registry
+ipcMain.handle('knowledge-migrate-to-supabase', async () => {
+  console.log('[Knowledge] Starting migration to Supabase...');
+  try {
+    if (!isKnowledgeSupabaseReady()) {
+      return { success: false, error: 'Supabase not connected' };
+    }
+
+    // Get all items from Qdrant
+    const items = await listItems(knowledgeSettings.collectionName);
+    console.log(`[Knowledge] Found ${items.length} items in Qdrant`);
+
+    // Group by source to derive unique documents
+    const bySource = new Map<string, { title: string; type: string; count: number; dateAdded: string }>();
+    for (const item of items) {
+      const source = item.metadata?.source || 'Unknown';
+      if (!bySource.has(source)) {
+        bySource.set(source, {
+          title: item.metadata?.filename || 'Unknown',
+          type: item.metadata?.type || 'txt',
+          count: 0,
+          dateAdded: item.metadata?.dateAdded || new Date().toISOString()
+        });
+      }
+      bySource.get(source)!.count++;
+    }
+
+    console.log(`[Knowledge] Migrating ${bySource.size} documents...`);
+
+    // Register each document in Supabase
+    let migrated = 0;
+    for (const [source, doc] of bySource) {
+      const result = await registerDocument(
+        source,
+        doc.title,
+        doc.type as 'txt' | 'md' | 'pdf' | 'url' | 'notion',
+        doc.count
+      );
+      if (result.success) migrated++;
+    }
+
+    console.log(`[Knowledge] Migration complete: ${migrated}/${bySource.size} documents`);
+    return { success: true, documentsMigrated: migrated, totalDocuments: bySource.size };
+  } catch (error: any) {
+    console.error('[Knowledge] Migration error:', error.message);
     return { success: false, error: error.message };
   }
 });
@@ -1906,6 +2010,10 @@ app.whenReady().then(() => {
     console.log('[Memory] Initializing memory system...');
     memorySettings = { ...DEFAULT_MEMORY_SETTINGS, ...memoryStored };
     initSupabaseClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+
+    // Initialize Knowledge Supabase registry (uses same Supabase credentials)
+    initKnowledgeSupabase(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+    console.log('[Knowledge] Knowledge Supabase registry initialized');
 
     // Initialize RAG settings for memory worker (needs Ollama model)
     const ragStored = store.get('ragSettings') as RAGSettings | undefined;

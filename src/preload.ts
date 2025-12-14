@@ -163,6 +163,8 @@ contextBridge.exposeInMainWorld('claude', {
   knowledgeList: () => ipcRenderer.invoke('knowledge-list'),
   knowledgeDelete: (ids: string[]) => ipcRenderer.invoke('knowledge-delete', ids),
   knowledgeDeleteBySource: (source: string) => ipcRenderer.invoke('knowledge-delete-by-source', source),
+  // Migrate existing Qdrant documents to Supabase registry
+  knowledgeMigrateToSupabase: () => ipcRenderer.invoke('knowledge-migrate-to-supabase'),
 
   // Open external URL in browser (for URL knowledge cards)
   openExternalUrl: (url: string) => ipcRenderer.invoke('open-external-url', url),
