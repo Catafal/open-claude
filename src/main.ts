@@ -89,8 +89,19 @@ import {
   processAssistantQuery,
   formatAssistantContext,
   getAccountsTokenStatus,
+  getEnabledAccounts,
   type AssistantSettingsStore
 } from './assistant';
+import {
+  initMorningEmailScheduler,
+  stopMorningEmailScheduler,
+  updateSchedulerSettings,
+  triggerMorningEmailNow,
+  getSchedulerStatus,
+  DEFAULT_AUTOMATION_SETTINGS,
+  type AutomationSettings
+} from './automation';
+import type { AutomationSettingsStore } from './types';
 
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
@@ -122,6 +133,9 @@ const DEFAULT_ASSISTANT_SETTINGS: AssistantSettingsStore = {
   googleAccounts: []
 };
 let assistantSettings: AssistantSettingsStore = { ...DEFAULT_ASSISTANT_SETTINGS };
+
+// Automation settings (morning email)
+let automationSettings: AutomationSettings = { ...DEFAULT_AUTOMATION_SETTINGS };
 
 // Default settings
 const DEFAULT_SETTINGS: SettingsSchema = {
@@ -892,7 +906,10 @@ ipcMain.handle('login', async () => {
 });
 
 ipcMain.handle('logout', async () => {
-  store.clear();
+  // Only clear Claude.ai session data, preserve user settings
+  // Keep persisted: deviceId, anonymousId, settings, knowledgeSettings, notionSettings,
+  // ragSettings, memorySettings, assistantSettings, automationSettings
+  store.delete('orgId');
   await session.defaultSession.clearStorageData({ storages: ['cookies'] });
   return { success: true };
 });
@@ -1331,7 +1348,7 @@ ipcMain.handle('knowledge-get-settings', async () => {
   knowledgeSettings = { ...DEFAULT_KNOWLEDGE_SETTINGS, ...stored };
 
   // Auto-initialize Qdrant client if URL is configured (persist connection like Claude session)
-  if (knowledgeSettings.qdrantUrl && knowledgeSettings.qdrantUrl !== DEFAULT_KNOWLEDGE_SETTINGS.qdrantUrl) {
+  if (knowledgeSettings.qdrantUrl) {
     try {
       initQdrantClient(knowledgeSettings);
     } catch (error) {
@@ -1561,6 +1578,64 @@ ipcMain.handle('assistant-get-accounts-token-status', async () => {
 ipcMain.handle('assistant-test-connection', async (_event, email: string) => {
   try {
     return await testAccountConnection(email);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
+  }
+});
+
+// ============================================================================
+// Automation Settings (Morning Email)
+// ============================================================================
+
+// Get automation settings
+ipcMain.handle('automation-get-settings', async () => {
+  return automationSettings;
+});
+
+// Save automation settings
+ipcMain.handle('automation-save-settings', async (_event, settings: Partial<AutomationSettings>) => {
+  automationSettings = { ...automationSettings, ...settings };
+  store.set('automationSettings', automationSettings as AutomationSettingsStore);
+  console.log(`[Automation] Settings saved (enabled: ${automationSettings.morningEmailEnabled})`);
+
+  // Update scheduler with new settings
+  const getAccountByEmail = (email: string) =>
+    assistantSettings.googleAccounts.find(a => a.email === email && a.enabled);
+
+  // Check if Resend is configured (required for sending)
+  const hasResendConfig = automationSettings.resendApiKey &&
+                          automationSettings.resendFromEmail &&
+                          automationSettings.resendToEmail;
+
+  if (automationSettings.morningEmailEnabled && hasResendConfig) {
+    initMorningEmailScheduler(
+      automationSettings,
+      getAccountByEmail,
+      ragSettings,
+      knowledgeSettings.collectionName,
+      {
+        url: memorySettings.supabaseUrl,
+        anonKey: memorySettings.supabaseAnonKey,
+        deviceId: store.get('deviceId') || crypto.randomUUID()
+      }
+    );
+  } else {
+    stopMorningEmailScheduler();
+  }
+
+  return { success: true };
+});
+
+// Get scheduler status
+ipcMain.handle('automation-get-status', async () => {
+  return getSchedulerStatus();
+});
+
+// Manually trigger morning email (for testing)
+ipcMain.handle('automation-trigger-now', async () => {
+  try {
+    return await triggerMorningEmailNow();
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return { success: false, error: errorMessage };
@@ -1948,32 +2023,13 @@ ipcMain.handle('knowledge-search', async (_event, query: string, limit: number =
   }
 });
 
-// List all knowledge items
+// List all knowledge items (from Qdrant - source of truth for vectors)
 ipcMain.handle('knowledge-list', async () => {
   console.log('[Knowledge] IPC: knowledge-list called');
   try {
-    // Prefer Supabase registry (faster, cross-device sync)
-    if (isKnowledgeSupabaseReady()) {
-      const docs = await listDocuments();
-      console.log(`[Knowledge] IPC: knowledge-list returning ${docs.length} documents from Supabase`);
-      // Transform to format expected by UI (KnowledgeItem-like)
-      return docs.map(doc => ({
-        id: doc.id,
-        content: '',  // UI only needs metadata for card display
-        metadata: {
-          source: doc.source,
-          filename: doc.title,
-          type: doc.type,
-          chunkIndex: 0,
-          totalChunks: doc.chunk_count,
-          dateAdded: doc.date_added
-        }
-      }));
-    }
-
-    // Fallback: scroll Qdrant (slower, but works without Supabase)
+    // Fetch from Qdrant (has actual content for previews + all chunk metadata)
     const items = await listItems(knowledgeSettings.collectionName);
-    console.log(`[Knowledge] IPC: knowledge-list returning ${items.length} items from Qdrant`);
+    console.log(`[Knowledge] IPC: knowledge-list returning ${items.length} chunks from Qdrant`);
     return items;
   } catch (error: any) {
     console.error('[Knowledge] List error:', error.message);
@@ -2255,6 +2311,11 @@ async function syncSinglePage(
     await upsertVectors(knowledgeSettings.collectionName, batch);
   }
 
+  // Register document in Supabase registry (if connected)
+  if (isKnowledgeSupabaseReady()) {
+    await registerDocument(pageUrl, pageTitle, 'notion', items.length);
+  }
+
   return { chunksCount: items.length };
 }
 
@@ -2360,6 +2421,11 @@ ipcMain.handle('notion-remove-tracked-page', async (_event, pageId: string) => {
     initQdrantClient(knowledgeSettings);
     await deleteBySource(knowledgeSettings.collectionName, page.url);
     console.log(`[Notion] Deleted chunks for: ${page.title}`);
+
+    // Unregister from Supabase registry (if connected)
+    if (isKnowledgeSupabaseReady()) {
+      await unregisterDocument(page.url);
+    }
 
     // Remove from tracked list
     notionSettings.trackedPages = trackedPages.filter(p => p.id !== pageId);
@@ -2485,6 +2551,18 @@ app.whenReady().then(() => {
   // Register spotlight shortcut from settings
   registerSpotlightShortcut();
 
+  // Initialize Qdrant client at startup (needed for knowledge-list)
+  const qdrantStored = store.get('knowledgeSettings') as KnowledgeSettingsStore | undefined;
+  knowledgeSettings = { ...DEFAULT_KNOWLEDGE_SETTINGS, ...qdrantStored };
+  if (knowledgeSettings.qdrantUrl) {
+    try {
+      initQdrantClient(knowledgeSettings);
+      console.log('[Knowledge] Qdrant client initialized at startup');
+    } catch (error) {
+      console.error('[Knowledge] Failed to initialize Qdrant at startup:', error);
+    }
+  }
+
   // Initialize memory system if configured (non-blocking)
   const memoryStored = store.get('memorySettings') as MemorySettingsStore | undefined;
   if (memoryStored?.enabled && memoryStored?.supabaseUrl && memoryStored?.supabaseAnonKey) {
@@ -2499,13 +2577,11 @@ app.whenReady().then(() => {
     // Initialize RAG settings for memory worker (needs Ollama model)
     const ragStored = store.get('ragSettings') as RAGSettings | undefined;
     const currentRagSettings = { ...DEFAULT_RAG_SETTINGS, ...ragStored };
-    const qdrantStored = store.get('knowledgeSettings') as KnowledgeSettingsStore | undefined;
-    const currentKnowledgeSettings = { ...DEFAULT_KNOWLEDGE_SETTINGS, ...qdrantStored };
 
     initMemoryWorker({
       enabled: memorySettings.enabled,
       ollamaModel: currentRagSettings.model,
-      collectionName: currentKnowledgeSettings.collectionName
+      collectionName: knowledgeSettings.collectionName
     });
     console.log('[Memory] Memory system initialized');
 
@@ -2525,6 +2601,73 @@ app.whenReady().then(() => {
         await runMaintenance();
       }
     }, 5 * 60 * 1000);
+  }
+
+  // Auto-sync settings from cloud on startup (if Supabase configured)
+  if (memorySettings.supabaseUrl && memorySettings.supabaseAnonKey) {
+    (async () => {
+      try {
+        initSettingsSyncClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+        const hasCloud = await hasCloudSettings();
+
+        if (hasCloud) {
+          console.log('[SettingsSync] Cloud settings found, checking for auto-pull...');
+
+          // Auto-pull if local settings appear to be default/empty
+          const localKnowledge = store.get('knowledgeSettings') as KnowledgeSettingsStore | undefined;
+          const localAssistant = store.get('assistantSettings') as AssistantSettingsStore | undefined;
+
+          const isLocalEmpty = !localKnowledge?.qdrantUrl && !localAssistant?.googleAccounts?.length;
+
+          if (isLocalEmpty) {
+            console.log('[SettingsSync] Local settings empty, auto-pulling from cloud...');
+            const cloudSettings = await loadSettingsFromCloud();
+
+            if (cloudSettings) {
+              // Apply cloud settings to local store
+              if (cloudSettings.settings) {
+                store.set('settings', { ...DEFAULT_SETTINGS, ...cloudSettings.settings });
+              }
+              if (cloudSettings.knowledge_settings) {
+                const merged = { ...DEFAULT_KNOWLEDGE_SETTINGS, ...cloudSettings.knowledge_settings };
+                store.set('knowledgeSettings', merged);
+                knowledgeSettings = merged;
+                if (knowledgeSettings.qdrantUrl) {
+                  initQdrantClient(knowledgeSettings);
+                }
+              }
+              if (cloudSettings.notion_settings) {
+                const merged = { ...DEFAULT_NOTION_SETTINGS, ...cloudSettings.notion_settings };
+                store.set('notionSettings', merged);
+                notionSettings = merged;
+              }
+              if (cloudSettings.rag_settings) {
+                const merged = { ...DEFAULT_RAG_SETTINGS, ...cloudSettings.rag_settings };
+                store.set('ragSettings', merged);
+                ragSettings = merged;
+              }
+              if (cloudSettings.assistant_settings) {
+                // Merge cloud credentials with local tokens (cloud doesn't have tokens)
+                const localAssistantSettings = store.get('assistantSettings') as AssistantSettingsStore | undefined;
+                const merged = {
+                  ...DEFAULT_ASSISTANT_SETTINGS,
+                  ...cloudSettings.assistant_settings,
+                  googleAccounts: localAssistantSettings?.googleAccounts || []
+                };
+                store.set('assistantSettings', merged);
+                assistantSettings = merged;
+              }
+
+              console.log('[SettingsSync] Auto-pull complete');
+            }
+          } else {
+            console.log('[SettingsSync] Local settings exist, skipping auto-pull');
+          }
+        }
+      } catch (err) {
+        console.error('[SettingsSync] Auto-sync failed:', err);
+      }
+    })();
   }
 
   // Auto-sync Notion on startup if configured
@@ -2598,6 +2741,35 @@ app.whenReady().then(() => {
   if (assistantStored) {
     assistantSettings = { ...DEFAULT_ASSISTANT_SETTINGS, ...assistantStored };
     console.log(`[Assistant] Settings loaded (enabled: ${assistantSettings.enabled}, accounts: ${assistantSettings.googleAccounts?.length || 0})`);
+  }
+
+  // Load Automation settings and initialize scheduler
+  const automationStored = store.get('automationSettings') as AutomationSettingsStore | undefined;
+  if (automationStored) {
+    automationSettings = { ...DEFAULT_AUTOMATION_SETTINGS, ...automationStored };
+    console.log(`[Automation] Settings loaded (enabled: ${automationSettings.morningEmailEnabled}, time: ${automationSettings.morningEmailTime})`);
+  }
+
+  // Initialize morning email scheduler (if enabled and Resend is configured)
+  const hasResendConfig = automationSettings.resendApiKey &&
+                          automationSettings.resendFromEmail &&
+                          automationSettings.resendToEmail;
+
+  if (automationSettings.morningEmailEnabled && hasResendConfig) {
+    const getAccountByEmail = (email: string) =>
+      assistantSettings.googleAccounts.find(a => a.email === email && a.enabled);
+
+    initMorningEmailScheduler(
+      automationSettings,
+      getAccountByEmail,
+      ragSettings,
+      knowledgeSettings.collectionName,
+      {
+        url: memorySettings.supabaseUrl,
+        anonKey: memorySettings.supabaseAnonKey,
+        deviceId: store.get('deviceId') || crypto.randomUUID()
+      }
+    );
   }
 
   app.on('activate', () => {

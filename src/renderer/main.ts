@@ -233,6 +233,10 @@ let knowledgeIsSearchMode = false;
 let knowledgeSearchTimeout: number;
 let knowledgeInitialized = false;
 
+// File ingestion queue (for multiple file uploads)
+let fileIngestionQueue: string[] = [];
+let isProcessingFileQueue = false;
+
 // Prompts state
 let promptsInitialized = false;
 let currentPromptFilter = 'all';
@@ -709,6 +713,15 @@ function initSettingsUI() {
     }
   });
 
+  // Automation: Enable toggle, time, Resend settings, account, and test button
+  $('settings-automation-enabled')?.addEventListener('change', saveAutomationSettings);
+  $('settings-automation-time')?.addEventListener('change', saveAutomationSettings);
+  $('settings-automation-resend-api-key')?.addEventListener('blur', saveAutomationSettings);
+  $('settings-automation-resend-from')?.addEventListener('blur', saveAutomationSettings);
+  $('settings-automation-resend-to')?.addEventListener('blur', saveAutomationSettings);
+  $('settings-automation-account')?.addEventListener('change', saveAutomationSettings);
+  $('automation-test-now')?.addEventListener('click', triggerAutomationNow);
+
   // Cloud Sync: Pull and Push buttons
   $('settings-sync-pull')?.addEventListener('click', pullSettingsFromCloud);
   $('settings-sync-push')?.addEventListener('click', pushSettingsToCloud);
@@ -748,6 +761,7 @@ function showSettings() {
   loadRagSettings();          // RAG Agent
   loadMemorySettings();       // Memory
   loadAssistantSettings();    // Personal Assistant (Google services)
+  loadAutomationSettings();   // Automations (morning email)
 }
 
 // Knowledge UI functions
@@ -1219,6 +1233,138 @@ async function connectGoogleAccount() {
 }
 
 // ============================================================================
+// Automation Functions (Morning Email)
+// ============================================================================
+
+/**
+ * Load automation settings and populate the UI.
+ */
+async function loadAutomationSettings() {
+  const enabled = $('settings-automation-enabled') as HTMLInputElement;
+  const time = $('settings-automation-time') as HTMLInputElement;
+  const resendApiKey = $('settings-automation-resend-api-key') as HTMLInputElement;
+  const resendFrom = $('settings-automation-resend-from') as HTMLInputElement;
+  const resendTo = $('settings-automation-resend-to') as HTMLInputElement;
+  const account = $('settings-automation-account') as HTMLSelectElement;
+  const status = $('automation-status') as HTMLElement;
+  if (!enabled || !time) return;
+
+  // Load settings
+  const settings = await window.claude.automationGetSettings?.();
+  if (!settings) return;
+
+  enabled.checked = settings.morningEmailEnabled === true;
+  time.value = settings.morningEmailTime || '07:30';
+
+  // Resend settings
+  if (resendApiKey) resendApiKey.value = settings.resendApiKey || '';
+  if (resendFrom) resendFrom.value = settings.resendFromEmail || '';
+  if (resendTo) resendTo.value = settings.resendToEmail || '';
+
+  // Populate account dropdown with connected Google accounts (optional)
+  if (account) {
+    const assistantSettings = await window.claude.assistantGetSettings?.();
+    const accounts = assistantSettings?.googleAccounts || [];
+
+    account.innerHTML = '<option value="">None (use memories & knowledge only)</option>';
+    accounts.forEach((acc: { email: string; enabled: boolean }) => {
+      if (acc.enabled) {
+        const option = document.createElement('option');
+        option.value = acc.email;
+        option.textContent = acc.email;
+        if (acc.email === settings.morningEmailAccount) {
+          option.selected = true;
+        }
+        account.appendChild(option);
+      }
+    });
+  }
+
+  // Update status text
+  if (status) {
+    if (!settings.morningEmailEnabled) {
+      status.textContent = 'Disabled';
+    } else if (!settings.resendApiKey || !settings.resendFromEmail || !settings.resendToEmail) {
+      status.textContent = 'Configure Resend settings';
+    } else {
+      status.textContent = `Scheduled for ${settings.morningEmailTime}`;
+    }
+  }
+}
+
+/**
+ * Save automation settings when user changes inputs.
+ */
+async function saveAutomationSettings() {
+  const enabled = $('settings-automation-enabled') as HTMLInputElement;
+  const time = $('settings-automation-time') as HTMLInputElement;
+  const resendApiKey = $('settings-automation-resend-api-key') as HTMLInputElement;
+  const resendFrom = $('settings-automation-resend-from') as HTMLInputElement;
+  const resendTo = $('settings-automation-resend-to') as HTMLInputElement;
+  const account = $('settings-automation-account') as HTMLSelectElement;
+  const status = $('automation-status') as HTMLElement;
+  if (!enabled || !time) return;
+
+  const settings = {
+    morningEmailEnabled: enabled.checked,
+    morningEmailTime: time.value || '07:30',
+    morningEmailAccount: account?.value || '',
+    resendApiKey: resendApiKey?.value || '',
+    resendFromEmail: resendFrom?.value || '',
+    resendToEmail: resendTo?.value || ''
+  };
+
+  await window.claude.automationSaveSettings?.(settings);
+
+  // Update status text
+  if (status) {
+    if (!settings.morningEmailEnabled) {
+      status.textContent = 'Disabled';
+    } else if (!settings.resendApiKey || !settings.resendFromEmail || !settings.resendToEmail) {
+      status.textContent = 'Configure Resend settings';
+    } else {
+      status.textContent = `Scheduled for ${settings.morningEmailTime}`;
+    }
+  }
+}
+
+/**
+ * Manually trigger the morning email (for testing).
+ */
+async function triggerAutomationNow() {
+  const button = $('automation-test-now') as HTMLButtonElement;
+  const status = $('automation-status') as HTMLElement;
+  if (!button) return;
+
+  button.disabled = true;
+  button.textContent = 'Sending...';
+
+  try {
+    const result = await window.claude.automationTriggerNow?.();
+
+    if (result?.success) {
+      if (status) status.textContent = 'Email sent!';
+      button.textContent = 'Sent!';
+      setTimeout(() => {
+        button.textContent = 'Send Now';
+        button.disabled = false;
+      }, 2000);
+    } else {
+      if (status) status.textContent = result?.error || 'Failed';
+      alert(result?.error || 'Failed to send morning email');
+      button.textContent = 'Send Now';
+      button.disabled = false;
+    }
+  } catch (err) {
+    console.error('Failed to trigger automation:', err);
+    if (status) status.textContent = 'Error';
+    alert('Failed to trigger morning email');
+    button.textContent = 'Send Now';
+    button.disabled = false;
+  }
+}
+
+// ============================================================================
 // Cloud Sync Functions
 // ============================================================================
 
@@ -1658,6 +1804,46 @@ async function ingestKnowledgeFile(filePath: string) {
   }
 }
 
+// Process multiple files from queue (used by drop zone and file dialog)
+async function processFileQueue() {
+  if (isProcessingFileQueue || fileIngestionQueue.length === 0) return;
+
+  isProcessingFileQueue = true;
+  const totalFiles = fileIngestionQueue.length;
+  let processed = 0;
+  let totalChunks = 0;
+  let errors: string[] = [];
+
+  while (fileIngestionQueue.length > 0) {
+    const filePath = fileIngestionQueue.shift()!;
+    processed++;
+
+    // Show progress: "Processing 2/5 files..."
+    const fileName = filePath.split('/').pop() || filePath;
+    showKnowledgeIngestStatus(`Processing ${processed}/${totalFiles}: ${fileName}`, 'loading');
+
+    const result = await window.claude.knowledgeIngestFile(filePath);
+    if (result.success) {
+      totalChunks += result.chunksIngested;
+    } else {
+      errors.push(fileName);
+    }
+  }
+
+  // Only reload UI once at the end
+  await loadKnowledgeItems();
+
+  // Show final status
+  if (errors.length > 0) {
+    showKnowledgeIngestStatus(`Added ${totalChunks} chunks (${errors.length} failed)`, 'error');
+  } else {
+    showKnowledgeIngestStatus(`Added ${totalChunks} chunks from ${totalFiles} files`, 'success');
+    clearKnowledgeIngestStatus();
+  }
+
+  isProcessingFileQueue = false;
+}
+
 async function ingestKnowledgeUrl(url: string) {
   showKnowledgeIngestStatus('Fetching URL...', 'loading');
   const result = await window.claude.knowledgeIngestUrl(url);
@@ -1691,6 +1877,14 @@ async function searchKnowledgeItems(query: string) {
 function renderKnowledgeItems(items: (KnowledgeItem | KnowledgeSearchResult)[], showScores: boolean) {
   const grid = $('knowledge-grid');
   if (!grid) return;
+
+  // Update source count
+  const countEl = $('knowledge-count');
+  if (countEl) {
+    const sources = new Set(items.map(i => (i as KnowledgeItem).metadata?.source || ''));
+    const count = sources.size;
+    countEl.textContent = `${count} source${count !== 1 ? 's' : ''}`;
+  }
 
   // Get the drop zone element
   const dropZoneHTML = `
@@ -1848,26 +2042,29 @@ function setupDropZone() {
     newDropZone.classList.remove('dragover');
   });
 
-  newDropZone.addEventListener('drop', async (e) => {
+  newDropZone.addEventListener('drop', (e) => {
     e.preventDefault();
     newDropZone.classList.remove('dragover');
 
     const files = (e as DragEvent).dataTransfer?.files;
     if (!files || files.length === 0) return;
 
+    // Add files to queue and process
     for (const file of Array.from(files)) {
       const filePath = (file as any).path;
       if (filePath) {
-        await ingestKnowledgeFile(filePath);
+        fileIngestionQueue.push(filePath);
       }
     }
+    processFileQueue(); // Non-blocking - starts processing in background
   });
 
   // Click to open file picker - use Electron dialog
   newDropZone.addEventListener('click', async () => {
     const filePaths = await window.claude.knowledgeOpenFileDialog();
-    for (const filePath of filePaths) {
-      await ingestKnowledgeFile(filePath);
+    if (filePaths.length > 0) {
+      fileIngestionQueue.push(...filePaths);
+      processFileQueue(); // Non-blocking
     }
   });
 }

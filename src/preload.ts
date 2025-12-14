@@ -210,6 +210,19 @@ contextBridge.exposeInMainWorld('claude', {
   assistantTestConnection: (email: string) => ipcRenderer.invoke('assistant-test-connection', email),
   assistantGetAccountsTokenStatus: () => ipcRenderer.invoke('assistant-get-accounts-token-status'),
 
+  // Automation Settings (Morning Email)
+  automationGetSettings: () => ipcRenderer.invoke('automation-get-settings'),
+  automationSaveSettings: (settings: {
+    morningEmailEnabled?: boolean;
+    morningEmailTime?: string;
+    morningEmailAccount?: string;
+    resendApiKey?: string;
+    resendFromEmail?: string;
+    resendToEmail?: string;
+  }) => ipcRenderer.invoke('automation-save-settings', settings),
+  automationGetStatus: () => ipcRenderer.invoke('automation-get-status'),
+  automationTriggerNow: () => ipcRenderer.invoke('automation-trigger-now'),
+
   // Settings Sync (Cloud Storage) - LOCAL wins, cloud is backup
   settingsSyncHasCloud: () => ipcRenderer.invoke('settings-sync-has-cloud'),
   settingsSyncPull: () => ipcRenderer.invoke('settings-sync-pull'),

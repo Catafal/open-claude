@@ -2332,6 +2332,9 @@
       <input type="text" id="search-input" class="knowledge-search-input" placeholder="Search your mind...">
     </div>
 
+    <!-- Source Count -->
+    <div class="knowledge-count" id="knowledge-count"></div>
+
     <!-- Document Grid -->
     <div class="knowledge-grid" id="knowledge-grid">
       <!-- Drop zone card (always first) -->
@@ -2745,6 +2748,82 @@
 
           <div class="setting-item setting-actions">
             <button id="assistant-add-account" class="btn btn-primary">+ Add Google Account</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Automation Section (collapsible) -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="automation">
+          <span class="section-icon">⏰</span>
+          <span class="section-title">Automations</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="automation-section">
+          <!-- Morning Email Toggle -->
+          <div class="setting-item setting-item-row">
+            <div class="setting-info">
+              <label>Morning Email</label>
+              <span class="setting-description">Daily personalized email with tasks, calendar, and knowledge highlights</span>
+            </div>
+            <label class="settings-toggle">
+              <input type="checkbox" id="settings-automation-enabled">
+              <span class="settings-toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- Time Picker -->
+          <div class="setting-item">
+            <label for="settings-automation-time">Send Time</label>
+            <span class="setting-description">When to send the morning email (24h format)</span>
+            <input type="time" id="settings-automation-time" class="settings-input settings-input-time" value="07:30">
+          </div>
+
+          <!-- Resend Configuration -->
+          <div class="setting-item setting-subheader">
+            <label>Email Sending (Resend)</label>
+            <span class="setting-description">Configure <a href="https://resend.com" target="_blank">Resend</a> to send emails</span>
+          </div>
+
+          <div class="setting-item">
+            <label for="settings-automation-resend-api-key">Resend API Key</label>
+            <span class="setting-description">Get your API key from <a href="https://resend.com/api-keys" target="_blank">Resend dashboard</a></span>
+            <input type="password" id="settings-automation-resend-api-key" class="settings-input" placeholder="re_xxxxxxxxx">
+          </div>
+
+          <div class="setting-item">
+            <label for="settings-automation-resend-from">From Email</label>
+            <span class="setting-description">Must be from a <a href="https://resend.com/domains" target="_blank">verified domain</a> or use onboarding@resend.dev for testing</span>
+            <input type="email" id="settings-automation-resend-from" class="settings-input" placeholder="you@yourdomain.com">
+          </div>
+
+          <div class="setting-item">
+            <label for="settings-automation-resend-to">To Email</label>
+            <span class="setting-description">Where to send the morning email</span>
+            <input type="email" id="settings-automation-resend-to" class="settings-input" placeholder="you@email.com">
+          </div>
+
+          <!-- Google Account (Optional) -->
+          <div class="setting-item setting-subheader">
+            <label>Context Source (Optional)</label>
+            <span class="setting-description">Google account for calendar, tasks, and email context</span>
+          </div>
+
+          <div class="setting-item">
+            <label for="settings-automation-account">Google Account</label>
+            <span class="setting-description">If connected, will include calendar events, tasks, and emails in context</span>
+            <select id="settings-automation-account" class="settings-input settings-select">
+              <option value="">None (use memories & knowledge only)</option>
+            </select>
+          </div>
+
+          <!-- Status and Test -->
+          <div class="setting-item setting-item-row">
+            <div class="setting-info">
+              <label>Status</label>
+              <span id="automation-status" class="setting-description">Disabled</span>
+            </div>
+            <button id="automation-test-now" class="btn btn-secondary">Send Now</button>
           </div>
         </div>
       </div>

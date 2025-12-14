@@ -1,8 +1,8 @@
 /**
  * Gmail Service
  *
- * Provides email retrieval for the Personal Assistant Agent.
- * All operations are readonly - no sending/modifying emails.
+ * Provides email retrieval and sending for the Personal Assistant Agent.
+ * Includes sendEmail for the morning automation feature.
  */
 
 import { google } from 'googleapis';
@@ -212,5 +212,71 @@ function parseDate(dateStr: string): string {
     return new Date(dateStr).toISOString();
   } catch {
     return dateStr;  // Return as-is if parsing fails
+  }
+}
+
+// =============================================================================
+// Email Sending (for Automation)
+// =============================================================================
+
+/**
+ * Send an email using Gmail API.
+ * Used by the morning email automation.
+ *
+ * @param account - Google account to send from
+ * @param to - Recipient email address
+ * @param subject - Email subject
+ * @param body - Email body (plain text)
+ * @returns Object with success status and messageId if successful
+ */
+export async function sendEmail(
+  account: GoogleAccount,
+  to: string,
+  subject: string,
+  body: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const auth = await getAuthenticatedClient(account);
+    const gmail = google.gmail({ version: 'v1', auth });
+
+    // Build RFC 2822 email message
+    const messageParts = [
+      `From: ${account.email}`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      body
+    ];
+    const message = messageParts.join('\n');
+
+    // Encode as base64url (Gmail API requirement)
+    const encodedMessage = Buffer.from(message)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    // Send the email
+    const response = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: {
+        raw: encodedMessage
+      }
+    });
+
+    console.log(`[Gmail] Email sent from ${account.email} to ${to}, messageId: ${response.data.id}`);
+
+    return {
+      success: true,
+      messageId: response.data.id || undefined
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[Gmail] Error sending email from ${account.email}:`, errorMessage);
+    return {
+      success: false,
+      error: errorMessage
+    };
   }
 }

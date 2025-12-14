@@ -50,7 +50,8 @@ export {
   getRecentEmails,
   getUnreadCount,
   searchEmails,
-  getUnreadEmails
+  getUnreadEmails,
+  sendEmail  // For morning email automation
 } from './gmail';
 
 // Tasks Service

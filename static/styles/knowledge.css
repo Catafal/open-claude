@@ -83,6 +83,14 @@ body {
   border-bottom-color: #CC785C;
 }
 
+/* Source Count */
+.knowledge-count {
+  padding: 0 24px 8px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.4);
+}
+
 /* Document Grid - Masonry Layout */
 .knowledge-grid {
   column-count: 4;
@@ -1279,6 +1287,10 @@ body {
 
   .knowledge-search-input:focus {
     border-bottom-color: #CC785C;
+  }
+
+  .knowledge-count {
+    color: rgba(255, 255, 255, 0.4);
   }
 
   .knowledge-grid::-webkit-scrollbar-thumb {

@@ -11,10 +11,11 @@ import Store from 'electron-store';
 import type { GoogleAccount, AssistantSettingsStore, OAuthResult } from './types';
 import type { StoreSchema } from '../types';
 
-// OAuth2 scopes - readonly access only
+// OAuth2 scopes - readonly access + gmail send for automation
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',  // For morning email automation
   'https://www.googleapis.com/auth/tasks.readonly',
   'https://www.googleapis.com/auth/userinfo.email'  // To get email address
 ];

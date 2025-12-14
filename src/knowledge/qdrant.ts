@@ -215,41 +215,52 @@ export async function deleteBySource(
 
 /**
  * List all items in the collection.
- * Uses scroll API for pagination.
+ * Paginates through ALL items using scroll API.
  */
-export async function listItems(
-  collectionName: string,
-  limit: number = 100
-): Promise<KnowledgeItem[]> {
+export async function listItems(collectionName: string): Promise<KnowledgeItem[]> {
   const qdrant = getQdrantClient();
+  const items: KnowledgeItem[] = [];
+  let nextOffset: string | number | null | undefined = undefined;
 
-  console.log(`[Qdrant] listItems: fetching from collection "${collectionName}"`);
+  console.log(`[Qdrant] listItems: fetching ALL items from "${collectionName}"`);
 
-  const result = await qdrant.scroll(collectionName, {
-    limit,
-    with_payload: true,
-    with_vector: false  // Don't need vectors for listing
-  });
-
-  console.log(`[Qdrant] listItems: got ${result.points.length} points`);
-
-  // Map to KnowledgeItem format
-  const items = result.points.map(point => ({
-    id: point.id as string,
-    content: (point.payload?.content as string) || '',
-    metadata: {
-      source: (point.payload?.source as string) || '',
-      filename: (point.payload?.filename as string) || '',
-      type: (point.payload?.type as KnowledgeMetadata['type']) || 'txt',
-      chunkIndex: (point.payload?.chunkIndex as number) || 0,
-      totalChunks: (point.payload?.totalChunks as number) || 1,
-      dateAdded: (point.payload?.dateAdded as string) || ''
+  do {
+    // Build scroll params - only include offset if defined
+    const scrollParams: Record<string, unknown> = {
+      limit: 100,
+      with_payload: true,
+      with_vector: false
+    };
+    if (nextOffset !== undefined && nextOffset !== null) {
+      scrollParams.offset = nextOffset;
     }
-  }));
 
-  // Log unique sources
+    const result = await qdrant.scroll(collectionName, scrollParams);
+
+    // Map points to KnowledgeItem format
+    for (const point of result.points) {
+      items.push({
+        id: point.id as string,
+        content: (point.payload?.content as string) || '',
+        metadata: {
+          source: (point.payload?.source as string) || '',
+          filename: (point.payload?.filename as string) || '',
+          type: (point.payload?.type as KnowledgeMetadata['type']) || 'txt',
+          chunkIndex: (point.payload?.chunkIndex as number) || 0,
+          totalChunks: (point.payload?.totalChunks as number) || 1,
+          dateAdded: (point.payload?.dateAdded as string) || ''
+        }
+      });
+    }
+
+    // Get next offset for pagination
+    const rawOffset = result.next_page_offset;
+    nextOffset = (typeof rawOffset === 'string' || typeof rawOffset === 'number') ? rawOffset : null;
+  } while (nextOffset !== null && nextOffset !== undefined);
+
+  // Log summary
   const sources = [...new Set(items.map(i => i.metadata.source))];
-  console.log(`[Qdrant] listItems: unique sources:`, sources);
+  console.log(`[Qdrant] listItems: ${items.length} chunks from ${sources.length} sources`);
 
   return items;
 }

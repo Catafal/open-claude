@@ -287,3 +287,71 @@ export async function runAssistantAgent(userQuery, model) {
 **File Modified:** `src/assistant/retrieval.ts`
 
 **Build Status:** ✅ Success
+
+### Morning Email Automation (Dec 14, 2024)
+
+**Feature:** Daily morning email automation that gathers context from memories, knowledge, calendar, tasks, and emails, sends to Claude for personalized content, then emails to self.
+
+**Files Created:**
+- `src/automation/types.ts` - Type definitions
+- `src/automation/supabase.ts` - Supabase state tracking (cross-device sync)
+- `src/automation/morning-email.ts` - Core automation logic
+- `src/automation/scheduler.ts` - Time-based scheduler with catch-up
+- `src/automation/index.ts` - Module exports
+
+**Files Modified:**
+- `src/assistant/google-client.ts` - Added `gmail.send` OAuth scope
+- `src/assistant/gmail.ts` - Added `sendEmail()` function
+- `src/assistant/index.ts` - Exported sendEmail
+- `src/types/index.ts` - Added AutomationSettingsStore
+- `src/main.ts` - Added automation initialization and IPC handlers
+- `src/preload.ts` - Added automation IPC bridge functions
+- `static/index.html` - Added Automations settings section
+- `src/renderer/main.ts` - Added automation UI handlers
+
+**Key Features:**
+1. Gmail send capability via `gmail.send` OAuth scope
+2. Supabase state tracking (won't send twice per day)
+3. Catch-up logic on startup (if app wasn't open at scheduled time)
+4. Configurable time and account in Settings UI
+5. "Send Now" button for testing
+
+**User Notes:**
+- Requires Supabase configuration for state tracking
+- App must be running for scheduler to work
+
+**Build Status:** ✅ Success
+
+### Resend Email Integration (Dec 14, 2024)
+
+**Issue:** Gmail OAuth token refresh was failing with `unauthorized_client` error, making email sending unreliable.
+
+**Solution:** Switched from Gmail API to [Resend](https://resend.com) for email sending. Resend only needs an API key - no OAuth required.
+
+**Files Created:**
+- `src/automation/resend.ts` - Simple Resend client (initResend, sendEmailWithResend, isResendConfigured)
+
+**Files Modified:**
+- `src/automation/types.ts` - Added resendApiKey, resendFromEmail, resendToEmail to AutomationSettings
+- `src/automation/morning-email.ts` - Use Resend instead of Gmail, Google account now optional (for context only)
+- `src/automation/scheduler.ts` - Check Resend config instead of Google account, initialize Resend client
+- `src/automation/index.ts` - Export Resend functions
+- `src/types/index.ts` - Added Resend fields to AutomationSettingsStore
+- `src/main.ts` - Check Resend config for scheduler initialization
+- `src/preload.ts` - Added Resend fields to automationSaveSettings type
+- `static/index.html` - Added Resend API Key, From Email, To Email fields in Automations section
+- `src/renderer/main.ts` - Handle new Resend input fields, updated status logic
+
+**Key Changes:**
+1. Email sending now uses Resend API (simple API key authentication)
+2. Google account is now **optional** - only used for calendar/tasks/email context
+3. If no Google account is connected, morning email still works with memories + knowledge only
+4. Added separate From/To email fields (can send to any email, not just self)
+
+**Settings UI:**
+- Resend API Key (get from resend.com/api-keys)
+- From Email (must be from verified Resend domain or use onboarding@resend.dev for testing)
+- To Email (where to receive the morning email)
+- Google Account (optional - for calendar/tasks/gmail context)
+
+**Build Status:** ✅ Success

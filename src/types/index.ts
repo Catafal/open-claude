@@ -67,6 +67,17 @@ export interface AssistantSettingsStore {
   googleClientSecret?: string;
 }
 
+// Automation settings (for morning email and future automations)
+export interface AutomationSettingsStore {
+  morningEmailEnabled: boolean;
+  morningEmailTime: string; // "HH:MM" format (24h), e.g., "07:30"
+  morningEmailAccount: string; // Google account email for calendar/tasks/gmail reading
+  // Resend email sending
+  resendApiKey?: string; // Resend API key
+  resendFromEmail?: string; // Email to send from (must be from verified domain)
+  resendToEmail?: string; // Email to send to (can be any email)
+}
+
 // Memory types for extraction and storage
 export type MemoryCategory = 'factual' | 'preference' | 'relationship' | 'temporal';
 
@@ -94,6 +105,7 @@ export interface StoreSchema {
   ragSettings?: RAGSettingsStore;
   memorySettings?: MemorySettingsStore;
   assistantSettings?: AssistantSettingsStore;  // Google services integration
+  automationSettings?: AutomationSettingsStore;  // Morning email and future automations
 }
 
 // File attachment payloads
