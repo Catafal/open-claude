@@ -2774,46 +2774,46 @@
 
           <!-- Time Picker -->
           <div class="setting-item">
-            <label for="settings-automation-time">Send Time</label>
-            <span class="setting-description">When to send the morning email (24h format)</span>
-            <input type="time" id="settings-automation-time" class="settings-input settings-input-time" value="07:30">
+            <div class="setting-info">
+              <label>Send Time</label>
+              <span class="setting-description">When to send the morning email (24h format)</span>
+            </div>
+            <input type="time" id="settings-automation-time" class="text-input" value="07:30">
           </div>
 
           <!-- Resend Configuration -->
-          <div class="setting-item setting-subheader">
-            <label>Email Sending (Resend)</label>
-            <span class="setting-description">Configure <a href="https://resend.com" target="_blank">Resend</a> to send emails</span>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Resend API Key</label>
+              <span class="setting-description">Get from <a href="https://resend.com/api-keys" target="_blank">Resend dashboard</a></span>
+            </div>
+            <input type="password" id="settings-automation-resend-api-key" class="text-input" placeholder="re_xxxxxxxxx">
           </div>
 
           <div class="setting-item">
-            <label for="settings-automation-resend-api-key">Resend API Key</label>
-            <span class="setting-description">Get your API key from <a href="https://resend.com/api-keys" target="_blank">Resend dashboard</a></span>
-            <input type="password" id="settings-automation-resend-api-key" class="settings-input" placeholder="re_xxxxxxxxx">
+            <div class="setting-info">
+              <label>From Email</label>
+              <span class="setting-description">Verified domain or onboarding@resend.dev</span>
+            </div>
+            <input type="email" id="settings-automation-resend-from" class="text-input" placeholder="you@yourdomain.com">
           </div>
 
           <div class="setting-item">
-            <label for="settings-automation-resend-from">From Email</label>
-            <span class="setting-description">Must be from a <a href="https://resend.com/domains" target="_blank">verified domain</a> or use onboarding@resend.dev for testing</span>
-            <input type="email" id="settings-automation-resend-from" class="settings-input" placeholder="you@yourdomain.com">
-          </div>
-
-          <div class="setting-item">
-            <label for="settings-automation-resend-to">To Email</label>
-            <span class="setting-description">Where to send the morning email</span>
-            <input type="email" id="settings-automation-resend-to" class="settings-input" placeholder="you@email.com">
+            <div class="setting-info">
+              <label>To Email</label>
+              <span class="setting-description">Where to send the morning email</span>
+            </div>
+            <input type="email" id="settings-automation-resend-to" class="text-input" placeholder="you@email.com">
           </div>
 
           <!-- Google Account (Optional) -->
-          <div class="setting-item setting-subheader">
-            <label>Context Source (Optional)</label>
-            <span class="setting-description">Google account for calendar, tasks, and email context</span>
-          </div>
-
           <div class="setting-item">
-            <label for="settings-automation-account">Google Account</label>
-            <span class="setting-description">If connected, will include calendar events, tasks, and emails in context</span>
-            <select id="settings-automation-account" class="settings-input settings-select">
-              <option value="">None (use memories & knowledge only)</option>
+            <div class="setting-info">
+              <label>Google Account</label>
+              <span class="setting-description">Optional - for calendar, tasks, email context</span>
+            </div>
+            <select id="settings-automation-account" class="text-input">
+              <option value="">None (memories & knowledge only)</option>
             </select>
           </div>
 

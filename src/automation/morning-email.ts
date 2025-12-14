@@ -285,25 +285,42 @@ Generate the morning email now:`;
 
     // Collect the full response
     let fullText = '';
+    let chunkCount = 0;
+    const eventTypes: string[] = [];
+
     await streamCompletion(
       orgId,
       conversationId,
       fullPrompt,
       conversationId, // parent = conversation id for first message
       (chunk) => {
-        // Parse SSE data
-        if (chunk.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(chunk.slice(6));
-            if (data.type === 'content_block_delta' && data.delta?.text) {
-              fullText += data.delta.text;
+        chunkCount++;
+        // Parse SSE data - handle multiple lines in a single chunk
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              // Track event types for debugging
+              if (data.type && !eventTypes.includes(data.type)) {
+                eventTypes.push(data.type);
+              }
+              // Handle text_delta within content_block_delta
+              if (data.type === 'content_block_delta') {
+                const delta = data.delta as { type?: string; text?: string } | undefined;
+                if (delta?.type === 'text_delta' && delta.text) {
+                  fullText += delta.text;
+                }
+              }
+            } catch {
+              // Ignore parse errors
             }
-          } catch {
-            // Ignore parse errors
           }
         }
       }
     );
+
+    console.log(`[Morning Email] Stream: ${chunkCount} chunks, text length: ${fullText.length}, events: ${eventTypes.join(', ')}`);
 
     // Cleanup: Delete the temporary conversation
     try {
@@ -315,7 +332,12 @@ Generate the morning email now:`;
       // Ignore cleanup errors
     }
 
-    return fullText.trim() || null;
+    if (!fullText.trim()) {
+      console.error('[Morning Email] Claude returned empty response');
+      return null;
+    }
+
+    return fullText.trim();
   } catch (error) {
     console.error('[Morning Email] Claude generation failed:', error);
     return null;
