@@ -59,6 +59,8 @@ declare global {
       // View switching
       onShowKnowledgeView?: (callback: () => void) => void;
       onShowSettingsView?: (callback: () => void) => void;
+      // Prompt Base - listen for selected prompts from selector window
+      onPromptSelected?: (callback: (content: string) => void) => void;
     };
   }
 }
@@ -230,6 +232,11 @@ let attachmentError = '';
 let knowledgeIsSearchMode = false;
 let knowledgeSearchTimeout: number;
 let knowledgeInitialized = false;
+
+// Prompts state
+let promptsInitialized = false;
+let currentPromptFilter = 'all';
+let editingPromptId: string | null = null;
 
 const modelDisplayNames: Record<string, string> = {
   'claude-opus-4-5-20251101': 'Opus 4.5',
@@ -415,6 +422,7 @@ function showHome() {
   const chat = $('chat');
   const knowledge = $('knowledge');
   const settings = $('settings');
+  const prompts = $('prompts');
   const sidebarTab = $('sidebar-tab');
   const homeInput = $('home-input') as HTMLTextAreaElement;
 
@@ -423,6 +431,7 @@ function showHome() {
   if (chat) chat.classList.remove('active');
   if (knowledge) knowledge.classList.remove('active');
   if (settings) settings.classList.remove('active');
+  if (prompts) prompts.classList.remove('active');
   if (sidebarTab) sidebarTab.classList.remove('hidden');
   if (homeInput) setTimeout(() => homeInput.focus(), 100);
 }
@@ -433,6 +442,7 @@ function showChat() {
   const chat = $('chat');
   const knowledge = $('knowledge');
   const settings = $('settings');
+  const prompts = $('prompts');
   const sidebarTab = $('sidebar-tab');
   const modelBadge = document.querySelector('.model-badge');
 
@@ -441,6 +451,7 @@ function showChat() {
   if (chat) chat.classList.add('active');
   if (knowledge) knowledge.classList.remove('active');
   if (settings) settings.classList.remove('active');
+  if (prompts) prompts.classList.remove('active');
   if (sidebarTab) sidebarTab.classList.remove('hidden');
   if (modelBadge) modelBadge.textContent = modelDisplayNames[selectedModel] || 'Opus 4.5';
 }
@@ -451,6 +462,7 @@ function showKnowledge() {
   const chat = $('chat');
   const knowledge = $('knowledge');
   const settings = $('settings');
+  const prompts = $('prompts');
   const sidebarTab = $('sidebar-tab');
 
   if (login) login.style.display = 'none';
@@ -458,6 +470,7 @@ function showKnowledge() {
   if (chat) chat.classList.remove('active');
   if (knowledge) knowledge.classList.add('active');
   if (settings) settings.classList.remove('active');
+  if (prompts) prompts.classList.remove('active');
   if (sidebarTab) sidebarTab.classList.add('hidden');
   closeSidebar();
 
@@ -467,6 +480,33 @@ function showKnowledge() {
     knowledgeInitialized = true;
   }
   loadKnowledgeItems();
+}
+
+// Show prompts management view
+function showPrompts() {
+  const login = $('login');
+  const home = $('home');
+  const chat = $('chat');
+  const knowledge = $('knowledge');
+  const settings = $('settings');
+  const prompts = $('prompts');
+  const sidebarTab = $('sidebar-tab');
+
+  if (login) login.style.display = 'none';
+  if (home) home.classList.remove('active');
+  if (chat) chat.classList.remove('active');
+  if (knowledge) knowledge.classList.remove('active');
+  if (settings) settings.classList.remove('active');
+  if (prompts) prompts.classList.add('active');
+  if (sidebarTab) sidebarTab.classList.add('hidden');
+  closeSidebar();
+
+  // Initialize prompts UI if first time
+  if (!promptsInitialized) {
+    initPromptsUI();
+    promptsInitialized = true;
+  }
+  loadPromptsList();
 }
 
 // Settings view state
@@ -667,6 +707,7 @@ function showSettings() {
   const chat = $('chat');
   const knowledge = $('knowledge');
   const settings = $('settings');
+  const prompts = $('prompts');
   const sidebarTab = $('sidebar-tab');
 
   if (login) login.style.display = 'none';
@@ -674,6 +715,7 @@ function showSettings() {
   if (chat) chat.classList.remove('active');
   if (knowledge) knowledge.classList.remove('active');
   if (settings) settings.classList.add('active');
+  if (prompts) prompts.classList.remove('active');
   if (sidebarTab) sidebarTab.classList.add('hidden');
   closeSidebar();
 
@@ -1675,6 +1717,249 @@ function initKnowledgeUI() {
 
   // Manual Import: Check updates button
   $('check-updates-btn')?.addEventListener('click', checkForUpdates);
+}
+
+// ============================================================================
+// Prompts Management Functions
+// ============================================================================
+
+interface StoredPrompt {
+  id: string;
+  name: string;
+  category: string;
+  content: string;
+  variables: Array<{ name: string; defaultValue: string; description: string }>;
+  is_favorite: boolean;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Load and render prompts list
+async function loadPromptsList() {
+  const listEl = $('prompts-list');
+  if (!listEl) return;
+
+  try {
+    const prompts: StoredPrompt[] = await window.claude.getPrompts();
+
+    // Filter by category if not 'all'
+    const filtered = currentPromptFilter === 'all'
+      ? prompts
+      : prompts.filter(p => p.category === currentPromptFilter);
+
+    // Sort: favorites first, then by usage count
+    filtered.sort((a, b) => {
+      if (a.is_favorite !== b.is_favorite) return a.is_favorite ? -1 : 1;
+      return b.usage_count - a.usage_count;
+    });
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = `<div class="prompts-empty">No prompts yet. Add your first!</div>`;
+      return;
+    }
+
+    listEl.innerHTML = filtered.map(prompt => `
+      <div class="prompt-card" data-id="${prompt.id}">
+        <div class="prompt-card-header">
+          <button class="prompt-favorite ${prompt.is_favorite ? 'active' : ''}" data-id="${prompt.id}">
+            ${prompt.is_favorite ? '⭐' : '☆'}
+          </button>
+          <span class="prompt-name">${escapeHtml(prompt.name)}</span>
+          <span class="prompt-category-badge">${escapeHtml(prompt.category)}</span>
+        </div>
+        <div class="prompt-preview">${escapeHtml(prompt.content.substring(0, 150))}${prompt.content.length > 150 ? '...' : ''}</div>
+        <div class="prompt-card-footer">
+          <span class="prompt-meta">Used ${prompt.usage_count} times</span>
+          <div class="prompt-actions">
+            <button class="prompt-action-btn edit" data-id="${prompt.id}">Edit</button>
+            <button class="prompt-action-btn delete" data-id="${prompt.id}">Delete</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    // Attach event handlers
+    listEl.querySelectorAll('.prompt-favorite').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = (e.currentTarget as HTMLElement).dataset.id;
+        if (id) {
+          await window.claude.togglePromptFavorite(id);
+          loadPromptsList();
+        }
+      });
+    });
+
+    listEl.querySelectorAll('.prompt-action-btn.edit').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = (e.currentTarget as HTMLElement).dataset.id;
+        if (id) openPromptModal(id);
+      });
+    });
+
+    listEl.querySelectorAll('.prompt-action-btn.delete').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = (e.currentTarget as HTMLElement).dataset.id;
+        if (id && confirm('Delete this prompt?')) {
+          await window.claude.deletePrompt(id);
+          loadPromptsList();
+        }
+      });
+    });
+
+    // Click on card to use prompt
+    listEl.querySelectorAll('.prompt-card').forEach(card => {
+      card.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.id;
+        if (id) {
+          const prompt = filtered.find(p => p.id === id);
+          if (prompt) {
+            // Increment usage
+            await window.claude.incrementPromptUsage(id);
+            // Insert into home input
+            const homeInput = $('home-input') as HTMLTextAreaElement;
+            if (homeInput) {
+              homeInput.value = prompt.content;
+              homeInput.focus();
+              showHome();
+            }
+          }
+        }
+      });
+    });
+
+  } catch (error) {
+    console.error('Failed to load prompts:', error);
+    listEl.innerHTML = `<div class="prompts-empty">Failed to load prompts. Check Supabase connection.</div>`;
+  }
+}
+
+// Open prompt modal for add/edit
+async function openPromptModal(promptId?: string) {
+  const modal = $('prompt-modal');
+  const titleEl = $('prompt-modal-title');
+  const nameInput = $('prompt-name') as HTMLInputElement;
+  const categorySelect = $('prompt-category') as HTMLSelectElement;
+  const contentTextarea = $('prompt-content') as HTMLTextAreaElement;
+
+  if (!modal || !titleEl || !nameInput || !categorySelect || !contentTextarea) return;
+
+  if (promptId) {
+    // Edit mode - load prompt
+    editingPromptId = promptId;
+    titleEl.textContent = 'Edit Prompt';
+    const prompts: StoredPrompt[] = await window.claude.getPrompts();
+    const prompt = prompts.find(p => p.id === promptId);
+    if (prompt) {
+      nameInput.value = prompt.name;
+      categorySelect.value = prompt.category;
+      contentTextarea.value = prompt.content;
+    }
+  } else {
+    // Add mode
+    editingPromptId = null;
+    titleEl.textContent = 'Add Prompt';
+    nameInput.value = '';
+    categorySelect.value = 'coding';
+    contentTextarea.value = '';
+  }
+
+  modal.classList.add('open');
+  nameInput.focus();
+}
+
+// Close prompt modal
+function closePromptModal() {
+  const modal = $('prompt-modal');
+  if (modal) modal.classList.remove('open');
+  editingPromptId = null;
+}
+
+// Save prompt (create or update)
+async function savePrompt() {
+  const nameInput = $('prompt-name') as HTMLInputElement;
+  const categorySelect = $('prompt-category') as HTMLSelectElement;
+  const contentTextarea = $('prompt-content') as HTMLTextAreaElement;
+
+  if (!nameInput || !categorySelect || !contentTextarea) return;
+
+  const name = nameInput.value.trim();
+  const category = categorySelect.value;
+  const content = contentTextarea.value.trim();
+
+  if (!name || !content) {
+    alert('Name and content are required');
+    return;
+  }
+
+  try {
+    if (editingPromptId) {
+      // Update existing
+      await window.claude.updatePrompt(editingPromptId, { name, category, content });
+    } else {
+      // Create new
+      await window.claude.createPrompt({ name, category, content, variables: [] });
+    }
+    closePromptModal();
+    loadPromptsList();
+  } catch (error) {
+    console.error('Failed to save prompt:', error);
+    alert('Failed to save prompt');
+  }
+}
+
+// Initialize prompts UI
+function initPromptsUI() {
+  // Category tabs
+  const categoriesEl = $('prompts-categories');
+  if (categoriesEl) {
+    categoriesEl.innerHTML = `
+      <button class="category-tab active" data-category="all">All</button>
+      <button class="category-tab" data-category="coding">Coding</button>
+      <button class="category-tab" data-category="writing">Writing</button>
+      <button class="category-tab" data-category="analysis">Analysis</button>
+      <button class="category-tab" data-category="research">Research</button>
+      <button class="category-tab" data-category="creative">Creative</button>
+      <button class="category-tab" data-category="system">System</button>
+    `;
+
+    categoriesEl.querySelectorAll('.category-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        categoriesEl.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentPromptFilter = (tab as HTMLElement).dataset.category || 'all';
+        loadPromptsList();
+      });
+    });
+  }
+
+  // Add button
+  $('prompts-add-btn')?.addEventListener('click', () => openPromptModal());
+
+  // Modal close handlers
+  $('prompt-modal-close')?.addEventListener('click', closePromptModal);
+  $('prompt-cancel-btn')?.addEventListener('click', closePromptModal);
+  $('prompt-save-btn')?.addEventListener('click', savePrompt);
+
+  // Close modal on backdrop click
+  $('prompt-modal')?.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).classList.contains('prompt-modal')) {
+      closePromptModal();
+    }
+  });
+
+  // Close modal on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const modal = $('prompt-modal');
+      if (modal?.classList.contains('open')) {
+        closePromptModal();
+      }
+    }
+  });
 }
 
 // Sidebar functions
@@ -2938,6 +3223,11 @@ function setupEventListeners() {
   $('logout-btn')?.addEventListener('click', logout);
   $('chat-logout-btn')?.addEventListener('click', logout);
 
+  // Prompts button - shows prompts management view
+  $('prompts-btn')?.addEventListener('click', () => {
+    showPrompts();
+  });
+
   // Knowledge button - shows knowledge view inline
   $('knowledge-btn')?.addEventListener('click', () => {
     showKnowledge();
@@ -2953,6 +3243,11 @@ function setupEventListeners() {
     showHome();
   });
 
+  // Prompts back button
+  $('prompts-back-btn')?.addEventListener('click', () => {
+    showHome();
+  });
+
   // Listen for show-knowledge-view from tray menu
   window.claude.onShowKnowledgeView?.(() => {
     showKnowledge();
@@ -2961,6 +3256,24 @@ function setupEventListeners() {
   // Listen for show-settings-view from tray menu
   window.claude.onShowSettingsView?.(() => {
     showSettings();
+  });
+
+  // Listen for prompt-selected from prompt selector window (Cmd+Shift+X)
+  window.claude.onPromptSelected?.((content: string) => {
+    const inputEl = $('input') as HTMLTextAreaElement | null;
+    if (inputEl) {
+      // Insert prompt at cursor or replace selection
+      const start = inputEl.selectionStart || 0;
+      const end = inputEl.selectionEnd || 0;
+      const before = inputEl.value.substring(0, start);
+      const after = inputEl.value.substring(end);
+      inputEl.value = before + content + after;
+      // Move cursor to end of inserted content
+      inputEl.selectionStart = inputEl.selectionEnd = start + content.length;
+      inputEl.focus();
+      // Trigger input event for auto-resize
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   });
 
   // New chat button

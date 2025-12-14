@@ -202,4 +202,43 @@ contextBridge.exposeInMainWorld('claude', {
   settingsSyncHasCloud: () => ipcRenderer.invoke('settings-sync-has-cloud'),
   settingsSyncPull: () => ipcRenderer.invoke('settings-sync-pull'),
   settingsSyncPush: () => ipcRenderer.invoke('settings-sync-push'),
+
+  // Prompt Base functions (Cmd+Shift+X prompt selector)
+  getPrompts: () => ipcRenderer.invoke('prompts-get-all'),
+  createPrompt: (input: { name: string; category: string; content: string; variables?: unknown[]; is_favorite?: boolean }) =>
+    ipcRenderer.invoke('prompts-create', input),
+  updatePrompt: (id: string, updates: { name?: string; category?: string; content?: string; variables?: unknown[]; is_favorite?: boolean }) =>
+    ipcRenderer.invoke('prompts-update', id, updates),
+  deletePrompt: (id: string) => ipcRenderer.invoke('prompts-delete', id),
+  togglePromptFavorite: (id: string) => ipcRenderer.invoke('prompts-toggle-favorite', id),
+  incrementPromptUsage: (id: string) => ipcRenderer.invoke('prompts-increment-usage', id),
+  analyzePrompt: (content: string) => ipcRenderer.invoke('prompts-analyze', content),
+  testPromptsConnection: () => ipcRenderer.invoke('prompts-test-connection'),
+  selectPrompt: (content: string) => ipcRenderer.invoke('prompts-select', content),
+  closePromptSelector: () => ipcRenderer.invoke('prompts-close-selector'),
+
+  // Prompt improvement with Claude
+  improvePromptWithClaude: (content: string) => ipcRenderer.invoke('prompts-improve-with-claude', content),
+  onImproveStream: (callback: (data: { text: string }) => void) => {
+    ipcRenderer.on('improve-stream', (_event, data) => callback(data));
+  },
+  onImproveComplete: (callback: (data: { improved: string }) => void) => {
+    ipcRenderer.on('improve-complete', (_event, data) => callback(data));
+  },
+  onImproveError: (callback: (data: { error: string }) => void) => {
+    ipcRenderer.on('improve-error', (_event, data) => callback(data));
+  },
+  removeImproveListeners: () => {
+    ipcRenderer.removeAllListeners('improve-stream');
+    ipcRenderer.removeAllListeners('improve-complete');
+    ipcRenderer.removeAllListeners('improve-error');
+  },
+
+  // Prompt selection listener (for main window to receive selected prompt)
+  onPromptSelected: (callback: (content: string) => void) => {
+    ipcRenderer.on('prompt-selected', (_event, content) => callback(content));
+  },
+  removePromptSelectedListener: () => {
+    ipcRenderer.removeAllListeners('prompt-selected');
+  },
 });

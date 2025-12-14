@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prompt Selector</title>
+  <link rel="stylesheet" href="styles/prompt-selector.css">
+</head>
+<body>
+  <div class="prompt-selector-container" id="container">
+    <!-- Search input row (draggable) -->
+    <div class="search-row" id="search-row">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <path d="M21 21l-4.35-4.35"/>
+      </svg>
+      <input
+        type="text"
+        id="search-input"
+        placeholder="Search prompts..."
+        autofocus
+      />
+      <button class="close-btn" id="close-btn" title="Close (Esc)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Mode toggle tabs -->
+    <div class="mode-tabs" id="mode-tabs">
+      <button class="mode-tab active" data-mode="search">Search</button>
+      <button class="mode-tab" data-mode="improve">Improve</button>
+    </div>
+
+    <!-- SEARCH MODE -->
+    <div class="search-mode" id="search-mode">
+      <!-- Category tabs -->
+      <div class="category-tabs" id="category-tabs">
+        <button class="category-tab active" data-category="all">All</button>
+        <button class="category-tab" data-category="coding">Coding</button>
+        <button class="category-tab" data-category="writing">Writing</button>
+        <button class="category-tab" data-category="analysis">Analysis</button>
+        <button class="category-tab" data-category="research">Research</button>
+        <button class="category-tab" data-category="creative">Creative</button>
+        <button class="category-tab" data-category="system">System</button>
+      </div>
+
+      <!-- Prompts list -->
+      <div class="prompts-list" id="prompts-list">
+        <div class="empty-state" id="empty-state">
+          <p>No prompts yet</p>
+          <span>Open Settings to add prompts</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- IMPROVE MODE -->
+    <div class="improve-mode" id="improve-mode" style="display: none;">
+      <!-- Input textarea -->
+      <div class="improve-input-section">
+        <textarea
+          id="improve-input"
+          placeholder="Paste your prompt here..."
+          rows="5"
+        ></textarea>
+        <button class="improve-btn" id="improve-btn">
+          <span class="improve-btn-text">Improve with Claude</span>
+          <span class="improve-btn-loading" style="display: none;">Improving...</span>
+        </button>
+      </div>
+
+      <!-- Result section -->
+      <div class="improve-result-section" id="improve-result-section" style="display: none;">
+        <div class="improve-result-header">Result</div>
+        <div class="improve-result-text" id="improve-result-text"></div>
+        <div class="improve-result-actions">
+          <button class="improve-action-btn" id="improve-use-btn">Use This</button>
+          <button class="improve-action-btn secondary" id="improve-copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Variable fill modal (hidden by default) -->
+    <div class="variable-modal" id="variable-modal" style="display: none;">
+      <div class="variable-modal-header">
+        <span>Fill Variables</span>
+        <button class="variable-close-btn" id="variable-close-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="variable-inputs" id="variable-inputs"></div>
+      <button class="variable-submit-btn" id="variable-submit-btn">Insert Prompt</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/prompt-selector.js"></script>
+</body>
+</html>

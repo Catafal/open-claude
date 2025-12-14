@@ -63,9 +63,25 @@ import {
   hasCloudSettings,
   type CloudSettings
 } from './settings';
+import {
+  initPromptsSupabaseClient,
+  testPromptsConnection,
+  getPrompts,
+  createPrompt,
+  updatePrompt,
+  deletePrompt,
+  toggleFavorite,
+  incrementUsageCount,
+  analyzePrompt,
+  initImprover,
+  type StoredPrompt,
+  type CreatePromptInput,
+  type UpdatePromptInput
+} from './prompts';
 
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
+let promptSelectorWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
 // Knowledge settings (loaded from store)
@@ -110,22 +126,31 @@ function saveSettings(settings: Partial<SettingsSchema>) {
   store.set('settings', { ...current, ...settings });
 }
 
-// Register spotlight shortcut
+// Register spotlight and prompt selector shortcuts
 function registerSpotlightShortcut() {
   globalShortcut.unregisterAll();
   const settings = getSettings();
   const keybind = settings.spotlightKeybind || DEFAULT_SETTINGS.spotlightKeybind;
 
+  // Register spotlight shortcut (Cmd+Shift+C by default)
   try {
     globalShortcut.register(keybind, () => {
       createSpotlightWindow();
     });
   } catch (e) {
-    // Fallback to default if custom keybind fails
-    console.error('Failed to register keybind:', keybind, e);
+    console.error('Failed to register spotlight keybind:', keybind, e);
     globalShortcut.register(DEFAULT_SETTINGS.spotlightKeybind, () => {
       createSpotlightWindow();
     });
+  }
+
+  // Register prompt selector shortcut (Cmd+Shift+X)
+  try {
+    globalShortcut.register('CommandOrControl+Shift+X', () => {
+      createPromptSelectorWindow();
+    });
+  } catch (e) {
+    console.error('Failed to register prompt selector keybind:', e);
   }
 }
 
@@ -174,6 +199,57 @@ function createSpotlightWindow() {
 
   spotlightWindow.on('closed', () => {
     spotlightWindow = null;
+  });
+}
+
+// Create prompt selector floating window (Cmd+Shift+X)
+function createPromptSelectorWindow() {
+  if (promptSelectorWindow && !promptSelectorWindow.isDestroyed()) {
+    promptSelectorWindow.focus();
+    return;
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth } = primaryDisplay.workAreaSize;
+
+  promptSelectorWindow = new BrowserWindow({
+    width: 500,
+    height: 520,  // Taller for improve mode results
+    x: Math.round((screenWidth - 500) / 2),
+    y: 150,
+    frame: false,
+    transparent: true,
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
+    backgroundColor: '#00000000',
+    resizable: true,  // Allow resize for large content
+    minWidth: 400,
+    minHeight: 350,
+    maxHeight: 700,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    closable: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  promptSelectorWindow.loadFile(path.join(__dirname, '../static/prompt-selector.html'));
+
+  // Close on blur (clicking outside)
+  promptSelectorWindow.on('blur', () => {
+    if (promptSelectorWindow && !promptSelectorWindow.isDestroyed()) {
+      promptSelectorWindow.close();
+    }
+  });
+
+  promptSelectorWindow.on('closed', () => {
+    promptSelectorWindow = null;
   });
 }
 
@@ -494,6 +570,91 @@ ipcMain.handle('spotlight-new-chat', async () => {
   spotlightConversationId = null;
   spotlightParentMessageUuid = null;
   spotlightMessages = [];
+});
+
+// ============================================================================
+// Prompt Improver (uses Claude API)
+// ============================================================================
+
+// Dedicated conversation for prompt improvement
+let improverConversationId: string | null = null;
+let improverParentMessageUuid: string | null = null;
+
+const IMPROVER_SYSTEM_PROMPT = `You are an expert prompt engineer. Your task is to improve the given prompt.
+
+Improve it by:
+1. Adding a clear role/persona if missing (e.g., "You are a...")
+2. Making requirements specific and measurable
+3. Adding output format specifications if helpful
+4. Removing vague language ("maybe", "try to", "could")
+5. Structuring with clear sections if the prompt is complex
+6. Adding constraints or boundaries where appropriate
+
+Return ONLY the improved prompt text. Do not include explanations, commentary, or markdown formatting around it.`;
+
+// Improve a prompt using Claude API
+ipcMain.handle('prompts-improve-with-claude', async (_event, promptContent: string) => {
+  const orgId = await getOrgId();
+  if (!orgId) throw new Error('Not authenticated');
+
+  // Create dedicated improver conversation if needed
+  if (!improverConversationId) {
+    const createResult = await makeRequest(
+      `${BASE_URL}/api/organizations/${orgId}/chat_conversations`,
+      'POST',
+      {
+        name: 'Prompt Improver',
+        model: 'claude-sonnet-4-20250514',
+        is_temporary: true,
+        include_conversation_preferences: true
+      }
+    );
+
+    if (createResult.status !== 201 && createResult.status !== 200) {
+      throw new Error('Failed to create improver conversation');
+    }
+
+    const convData = createResult.data as { uuid: string };
+    improverConversationId = convData.uuid;
+    improverParentMessageUuid = null;
+  }
+
+  const conversationId = improverConversationId;
+  const parentMessageUuid = improverParentMessageUuid || conversationId;
+
+  // Combine system prompt with user's prompt
+  const fullPrompt = `${IMPROVER_SYSTEM_PROMPT}\n\n---\n\nPrompt to improve:\n${promptContent}`;
+
+  const state = createStreamState();
+  let improvedText = '';
+
+  const callbacks: StreamCallbacks = {
+    onTextDelta: (_text, fullText, _blockIndex) => {
+      improvedText = fullText;  // Use fullText from parser (already accumulated)
+      // Stream to prompt selector window
+      promptSelectorWindow?.webContents.send('improve-stream', { text: fullText });
+    },
+    onComplete: (fullText, _steps, messageUuid) => {
+      improverParentMessageUuid = messageUuid;
+      promptSelectorWindow?.webContents.send('improve-complete', { improved: fullText });
+    }
+  };
+
+  try {
+    await streamCompletion(
+      orgId,
+      conversationId,
+      fullPrompt,
+      parentMessageUuid,
+      (chunk) => processSSEChunk(chunk, state, callbacks)
+    );
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    promptSelectorWindow?.webContents.send('improve-error', { error: errorMessage });
+    throw error;
+  }
+
+  return { improved: improvedText };
 });
 
 // ============================================================================
@@ -1329,6 +1490,123 @@ ipcMain.handle('settings-sync-push', async () => {
     const msg = error instanceof Error ? error.message : String(error);
     console.error('[SettingsSync] Push failed:', msg);
     return { success: false, error: msg };
+  }
+});
+
+// ============================================================================
+// Prompt Base IPC Handlers
+// ============================================================================
+
+// Initialize prompts Supabase client when memory settings are available
+function initPromptsClient() {
+  if (memorySettings.supabaseUrl && memorySettings.supabaseAnonKey) {
+    initPromptsSupabaseClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+    // Also init improver with RAG settings if available
+    if (ragSettings.ollamaUrl && ragSettings.model) {
+      initImprover(ragSettings.ollamaUrl, ragSettings.model);
+    }
+  }
+}
+
+// Get all prompts
+ipcMain.handle('prompts-get-all', async () => {
+  try {
+    initPromptsClient();
+    return await getPrompts();
+  } catch (error: unknown) {
+    console.error('[Prompts] Failed to get prompts:', error);
+    return [];
+  }
+});
+
+// Create a new prompt
+ipcMain.handle('prompts-create', async (_event, input: CreatePromptInput) => {
+  try {
+    initPromptsClient();
+    return await createPrompt(input);
+  } catch (error: unknown) {
+    console.error('[Prompts] Failed to create prompt:', error);
+    return null;
+  }
+});
+
+// Update a prompt
+ipcMain.handle('prompts-update', async (_event, id: string, updates: UpdatePromptInput) => {
+  try {
+    initPromptsClient();
+    return await updatePrompt(id, updates);
+  } catch (error: unknown) {
+    console.error('[Prompts] Failed to update prompt:', error);
+    return null;
+  }
+});
+
+// Delete a prompt
+ipcMain.handle('prompts-delete', async (_event, id: string) => {
+  try {
+    initPromptsClient();
+    return await deletePrompt(id);
+  } catch (error: unknown) {
+    console.error('[Prompts] Failed to delete prompt:', error);
+    return false;
+  }
+});
+
+// Toggle prompt favorite
+ipcMain.handle('prompts-toggle-favorite', async (_event, id: string) => {
+  try {
+    initPromptsClient();
+    return await toggleFavorite(id);
+  } catch (error: unknown) {
+    console.error('[Prompts] Failed to toggle favorite:', error);
+    return null;
+  }
+});
+
+// Increment prompt usage count
+ipcMain.handle('prompts-increment-usage', async (_event, id: string) => {
+  try {
+    initPromptsClient();
+    return await incrementUsageCount(id);
+  } catch (error: unknown) {
+    console.error('[Prompts] Failed to increment usage:', error);
+    return false;
+  }
+});
+
+// Analyze and improve a prompt
+ipcMain.handle('prompts-analyze', async (_event, content: string) => {
+  try {
+    initPromptsClient();
+    return await analyzePrompt(content);
+  } catch (error: unknown) {
+    console.error('[Prompts] Failed to analyze prompt:', error);
+    return null;
+  }
+});
+
+// Test prompts connection
+ipcMain.handle('prompts-test-connection', async () => {
+  try {
+    initPromptsClient();
+    return await testPromptsConnection();
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: msg };
+  }
+});
+
+// Select prompt (send to main window chat input)
+ipcMain.handle('prompts-select', async (_event, promptContent: string) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('prompt-selected', promptContent);
+  }
+});
+
+// Close prompt selector window
+ipcMain.handle('prompts-close-selector', async () => {
+  if (promptSelectorWindow && !promptSelectorWindow.isDestroyed()) {
+    promptSelectorWindow.close();
   }
 });
 
