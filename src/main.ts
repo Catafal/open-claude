@@ -1721,6 +1721,20 @@ ipcMain.handle('settings-sync-pull', async () => {
       assistantSettings = merged as AssistantSettingsStore;
     }
 
+    // Pull automation settings (morning email config)
+    if (cloudSettings.automation_settings && Object.keys(cloudSettings.automation_settings).length > 0) {
+      const merged = { ...DEFAULT_AUTOMATION_SETTINGS, ...cloudSettings.automation_settings };
+      store.set('automationSettings', merged);
+      automationSettings = merged as AutomationSettings;
+      // Reschedule if enabled
+      const hasResendConfig = automationSettings.resendApiKey &&
+                              automationSettings.resendFromEmail &&
+                              automationSettings.resendToEmail;
+      if (automationSettings.morningEmailEnabled && hasResendConfig) {
+        scheduleMorningEmail(automationSettings, memorySettings, ragSettings, knowledgeSettings, assistantSettings);
+      }
+    }
+
     console.log('[SettingsSync] Pulled settings from cloud');
     return { success: true };
   } catch (error: unknown) {
@@ -1742,6 +1756,7 @@ ipcMain.handle('settings-sync-push', async () => {
     // Gather all current settings (exclude memorySettings - chicken/egg)
     // For assistant: only sync credentials, NOT Google account tokens (security)
     const assistantStore = store.get('assistantSettings');
+    const automationStore = store.get('automationSettings');
     const cloudSettings: CloudSettings = {
       settings: store.get('settings') || {},
       knowledge_settings: store.get('knowledgeSettings') || {},
@@ -1752,7 +1767,8 @@ ipcMain.handle('settings-sync-push', async () => {
         googleClientId: assistantStore.googleClientId,
         googleClientSecret: assistantStore.googleClientSecret
         // NOTE: googleAccounts[] excluded - tokens stay local
-      } : undefined
+      } : undefined,
+      automation_settings: automationStore || undefined
     };
 
     const success = await saveSettingsToCloud(cloudSettings);

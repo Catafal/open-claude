@@ -2006,6 +2006,7 @@
       .settings-view-textarea::placeholder { color: rgba(255, 255, 255, 0.35) !important; }
       .settings-about-label { color: rgba(255, 255, 255, 0.6) !important; }
       .settings-about-value { color: #f0f0f0 !important; }
+      .settings-category-title { color: rgba(255, 255, 255, 0.4) !important; }
     }
 
     /* Knowledge view show/hide */
@@ -2201,6 +2202,28 @@
     .settings-about-row { display: flex; justify-content: space-between; align-items: center; }
     .settings-about-label { font-size: 14px; color: rgba(0, 0, 0, 0.6); }
     .settings-about-value { font-size: 14px; color: #1a1a1a; font-family: 'SF Mono', Menlo, monospace; }
+
+    /* Settings Category Groups */
+    .settings-category {
+      margin-bottom: 24px;
+    }
+    .settings-category:last-child {
+      margin-bottom: 0;
+    }
+    .settings-category-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 4px;
+      margin-bottom: 8px;
+    }
+    .settings-category-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: rgba(0, 0, 0, 0.4);
+    }
 
     /* Knowledge back button */
     .knowledge-back-btn {
@@ -2519,374 +2542,401 @@
     </div>
     <div class="settings-view-content">
 
-      <!-- Spotlight Section (collapsible) -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="spotlight">
-          <span class="section-icon">🎯</span>
-          <span class="section-title">Spotlight</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="spotlight-section">
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Keyboard Shortcut</label>
-              <span class="setting-description">Global shortcut to open spotlight</span>
+      <!-- GENERAL -->
+      <div class="settings-category">
+        <div class="settings-category-header">
+          <span class="settings-category-title">General</span>
+        </div>
+
+        <!-- Spotlight Section -->
+        <div class="settings-section">
+          <button class="settings-section-header" data-section="spotlight">
+            <span class="section-icon">🎯</span>
+            <span class="section-title">Spotlight</span>
+            <span class="section-arrow">›</span>
+          </button>
+          <div class="settings-section-content" id="spotlight-section">
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Keyboard Shortcut</label>
+                <span class="setting-description">Global shortcut to open spotlight</span>
+              </div>
+              <div class="keybind-input" id="keybind-input" tabindex="0">
+                <span class="keybind-display" id="keybind-display">⌘ + Shift + C</span>
+                <span class="keybind-hint">Click to change</span>
+              </div>
             </div>
-            <div class="keybind-input" id="keybind-input" tabindex="0">
-              <span class="keybind-display" id="keybind-display">⌘ + Shift + C</span>
-              <span class="keybind-hint">Click to change</span>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Persist History</label>
+                <span class="setting-description">Keep spotlight chat history after closing</span>
+              </div>
+              <label class="settings-toggle">
+                <input type="checkbox" id="persist-history">
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="setting-item setting-item-vertical">
+              <div class="setting-info">
+                <label>System Prompt</label>
+                <span class="setting-description">Instructions prepended to spotlight messages</span>
+              </div>
+              <textarea id="spotlight-system-prompt" class="settings-view-textarea" placeholder="e.g., search for real citations that verify your response..."></textarea>
             </div>
           </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Persist History</label>
-              <span class="setting-description">Keep spotlight chat history after closing</span>
+        </div>
+
+        <!-- About Section -->
+        <div class="settings-section">
+          <button class="settings-section-header" data-section="about">
+            <span class="section-icon">ℹ️</span>
+            <span class="section-title">About</span>
+            <span class="section-arrow">›</span>
+          </button>
+          <div class="settings-section-content" id="about-section">
+            <div class="settings-about-info">
+              <div class="settings-about-row">
+                <span class="settings-about-label">Version</span>
+                <span class="settings-about-value" id="app-version">1.0.0</span>
+              </div>
             </div>
-            <label class="settings-toggle">
-              <input type="checkbox" id="persist-history">
-              <span class="settings-toggle-slider"></span>
-            </label>
-          </div>
-          <div class="setting-item setting-item-vertical">
-            <div class="setting-info">
-              <label>System Prompt</label>
-              <span class="setting-description">Instructions prepended to spotlight messages</span>
-            </div>
-            <textarea id="spotlight-system-prompt" class="settings-view-textarea" placeholder="e.g., search for real citations that verify your response..."></textarea>
           </div>
         </div>
       </div>
 
-      <!-- Qdrant Section (collapsible) -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="qdrant">
-          <span class="section-icon">🔷</span>
-          <span class="section-title">Qdrant Vector DB</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="qdrant-section">
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>URL</label>
-              <span class="setting-description">Local Docker or Cloud</span>
+      <!-- KNOWLEDGE & AI -->
+      <div class="settings-category">
+        <div class="settings-category-header">
+          <span class="settings-category-title">Knowledge & AI</span>
+        </div>
+
+        <!-- RAG Agent Section -->
+        <div class="settings-section">
+          <button class="settings-section-header" data-section="rag">
+            <span class="section-icon">🧠</span>
+            <span class="section-title">RAG Agent</span>
+            <span class="section-arrow">›</span>
+          </button>
+          <div class="settings-section-content" id="rag-section">
+            <div class="setting-item setting-item-row">
+              <div class="setting-info">
+                <label>Enable RAG</label>
+                <span class="setting-description">AI-powered knowledge retrieval</span>
+              </div>
+              <input type="checkbox" id="rag-enabled" class="toggle-switch" checked>
             </div>
-            <input type="text" id="qdrant-url" class="text-input" placeholder="http://localhost:6333">
-          </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>API Key</label>
-              <span class="setting-description">Optional - for Cloud</span>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Ollama URL</label>
+                <span class="setting-description">Local Ollama server</span>
+              </div>
+              <input type="text" id="rag-ollama-url" class="text-input" placeholder="http://localhost:11434">
             </div>
-            <input type="password" id="qdrant-key" class="text-input" placeholder="Enter API key">
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Model</label>
+                <span class="setting-description">Small model for decisions</span>
+              </div>
+              <select id="rag-model" class="text-input">
+                <option value="ministral-3:3b" selected>ministral-3:3b (Recommended)</option>
+                <option value="qwen2.5:3b">qwen2.5:3b</option>
+                <option value="llama3.2:3b">llama3.2:3b</option>
+                <option value="phi3:mini">phi3:mini</option>
+              </select>
+            </div>
+            <div class="setting-item setting-actions">
+              <button id="rag-test-connection" class="btn btn-secondary">Test Connection</button>
+              <span id="rag-connection-status" class="status-text"></span>
+            </div>
           </div>
-          <div class="setting-item setting-actions">
-            <button id="test-connection" class="btn btn-secondary">Test Connection</button>
-            <span id="connection-status" class="status-text"></span>
+        </div>
+
+        <!-- Qdrant Section -->
+        <div class="settings-section">
+          <button class="settings-section-header" data-section="qdrant">
+            <span class="section-icon">🔷</span>
+            <span class="section-title">Qdrant Vector DB</span>
+            <span class="section-arrow">›</span>
+          </button>
+          <div class="settings-section-content" id="qdrant-section">
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>URL</label>
+                <span class="setting-description">Local Docker or Cloud</span>
+              </div>
+              <input type="text" id="qdrant-url" class="text-input" placeholder="http://localhost:6333">
+            </div>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>API Key</label>
+                <span class="setting-description">Optional - for Cloud</span>
+              </div>
+              <input type="password" id="qdrant-key" class="text-input" placeholder="Enter API key">
+            </div>
+            <div class="setting-item setting-actions">
+              <button id="test-connection" class="btn btn-secondary">Test Connection</button>
+              <span id="connection-status" class="status-text"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Firecrawl Section -->
+        <div class="settings-section">
+          <button class="settings-section-header" data-section="firecrawl">
+            <span class="section-icon">🔥</span>
+            <span class="section-title">Firecrawl (URL Scraping)</span>
+            <span class="section-arrow">›</span>
+          </button>
+          <div class="settings-section-content" id="firecrawl-section">
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>API Key</label>
+                <span class="setting-description">Get key at <a href="https://firecrawl.dev" target="_blank">firecrawl.dev</a></span>
+              </div>
+              <input type="password" id="firecrawl-key" class="text-input" placeholder="fc-...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Notion Section -->
+        <div class="settings-section">
+          <button class="settings-section-header" data-section="notion">
+            <span class="section-icon">📝</span>
+            <span class="section-title">Notion</span>
+            <span class="section-arrow">›</span>
+          </button>
+          <div class="settings-section-content" id="notion-section">
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Token</label>
+                <span class="setting-description">From <a href="https://notion.so/my-integrations" target="_blank">my-integrations</a></span>
+              </div>
+              <input type="password" id="notion-token" class="text-input" placeholder="secret_...">
+            </div>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Auto-sync</label>
+                <span class="setting-description">Sync on app start</span>
+              </div>
+              <input type="checkbox" id="notion-auto-sync" class="toggle-switch" checked>
+            </div>
+            <div class="setting-item setting-actions">
+              <button id="notion-test" class="btn btn-secondary">Test</button>
+              <button id="notion-sync" class="btn btn-primary">Sync Now</button>
+              <span id="notion-status" class="status-text"></span>
+            </div>
+            <div id="notion-last-sync" class="last-sync-info"></div>
           </div>
         </div>
       </div>
 
-      <!-- Firecrawl Section (collapsible) -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="firecrawl">
-          <span class="section-icon">🔥</span>
-          <span class="section-title">Firecrawl (URL Scraping)</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="firecrawl-section">
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>API Key</label>
-              <span class="setting-description">Get key at <a href="https://firecrawl.dev" target="_blank">firecrawl.dev</a></span>
-            </div>
-            <input type="password" id="firecrawl-key" class="text-input" placeholder="fc-...">
-          </div>
-          <p class="setting-hint">Required for adding URLs to knowledge base</p>
+      <!-- DATA & CLOUD -->
+      <div class="settings-category">
+        <div class="settings-category-header">
+          <span class="settings-category-title">Data & Cloud</span>
         </div>
-      </div>
 
-      <!-- Notion Section (collapsible) -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="notion">
-          <span class="section-icon">📝</span>
-          <span class="section-title">Notion</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="notion-section">
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Token</label>
-              <span class="setting-description">From <a href="https://notion.so/my-integrations" target="_blank">my-integrations</a></span>
+        <!-- Memory Section -->
+        <div class="settings-section">
+          <button class="settings-section-header" data-section="memory">
+            <span class="section-icon">🧠</span>
+            <span class="section-title">Memory</span>
+            <span class="section-arrow">›</span>
+          </button>
+          <div class="settings-section-content" id="memory-section">
+            <div class="setting-item setting-item-row">
+              <div class="setting-info">
+                <label>Enable Memory</label>
+                <span class="setting-description">Remember context from conversations using Supabase</span>
+              </div>
+              <label class="settings-toggle">
+                <input type="checkbox" id="settings-memory-enabled">
+                <span class="settings-toggle-slider"></span>
+              </label>
             </div>
-            <input type="password" id="notion-token" class="text-input" placeholder="secret_...">
-          </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Auto-sync</label>
-              <span class="setting-description">Sync on app start</span>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Supabase URL</label>
+                <span class="setting-description">Your Supabase project URL</span>
+              </div>
+              <input type="text" id="settings-memory-supabase-url" class="text-input" placeholder="https://xxx.supabase.co">
             </div>
-            <input type="checkbox" id="notion-auto-sync" class="toggle-switch" checked>
-          </div>
-          <div class="setting-item setting-actions">
-            <button id="notion-test" class="btn btn-secondary">Test</button>
-            <button id="notion-sync" class="btn btn-primary">Sync Now</button>
-            <span id="notion-status" class="status-text"></span>
-          </div>
-          <div id="notion-last-sync" class="last-sync-info"></div>
-        </div>
-      </div>
-
-      <!-- RAG Agent Section (collapsible) -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="rag">
-          <span class="section-icon">🧠</span>
-          <span class="section-title">RAG Agent</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="rag-section">
-          <div class="setting-item setting-item-row">
-            <div class="setting-info">
-              <label>Enable RAG</label>
-              <span class="setting-description">AI-powered knowledge retrieval</span>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Supabase Anon Key</label>
+                <span class="setting-description">Your project's anon/public key</span>
+              </div>
+              <input type="password" id="settings-memory-supabase-key" class="text-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
             </div>
-            <input type="checkbox" id="rag-enabled" class="toggle-switch" checked>
-          </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Ollama URL</label>
-              <span class="setting-description">Local Ollama server</span>
+            <div class="setting-item setting-actions">
+              <button id="memory-test-connection" class="btn btn-secondary">Test Connection</button>
+              <span id="memory-connection-status" class="status-text"></span>
             </div>
-            <input type="text" id="rag-ollama-url" class="text-input" placeholder="http://localhost:11434">
-          </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Model</label>
-              <span class="setting-description">Small model for decisions</span>
-            </div>
-            <select id="rag-model" class="text-input">
-              <option value="ministral-3:3b" selected>ministral-3:3b (Recommended)</option>
-              <option value="qwen2.5:3b">qwen2.5:3b</option>
-              <option value="llama3.2:3b">llama3.2:3b</option>
-              <option value="phi3:mini">phi3:mini</option>
-            </select>
-          </div>
-          <div class="setting-item setting-actions">
-            <button id="rag-test-connection" class="btn btn-secondary">Test Connection</button>
-            <span id="rag-connection-status" class="status-text"></span>
           </div>
         </div>
-      </div>
 
-      <!-- Memory Section (collapsible) -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="memory">
-          <span class="section-icon">🧠</span>
-          <span class="section-title">Memory</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="memory-section">
-          <div class="setting-item setting-item-row">
-            <div class="setting-info">
-              <label>Enable Memory</label>
-              <span class="setting-description">Remember context from conversations using Supabase</span>
+        <!-- Cloud Sync Section -->
+        <div class="settings-section">
+          <button class="settings-section-header" data-section="cloud-sync">
+            <span class="section-icon">☁️</span>
+            <span class="section-title">Cloud Sync</span>
+            <span class="section-arrow">›</span>
+          </button>
+          <div class="settings-section-content" id="cloud-sync-section">
+            <div class="setting-item setting-item-row">
+              <div class="setting-info">
+                <label>Settings Sync</label>
+                <span class="setting-description">Sync your app settings to/from Supabase cloud</span>
+              </div>
+              <span id="settings-sync-status" class="status-text">Configure Supabase first</span>
             </div>
-            <label class="settings-toggle">
-              <input type="checkbox" id="settings-memory-enabled">
-              <span class="settings-toggle-slider"></span>
-            </label>
-          </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Supabase URL</label>
-              <span class="setting-description">Your Supabase project URL</span>
+            <div class="setting-item setting-actions sync-actions">
+              <button id="settings-sync-pull" class="btn btn-secondary" disabled>
+                ↓ Pull from Cloud
+              </button>
+              <button id="settings-sync-push" class="btn btn-primary" disabled>
+                ↑ Push to Cloud
+              </button>
             </div>
-            <input type="text" id="settings-memory-supabase-url" class="text-input" placeholder="https://xxx.supabase.co">
-          </div>
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Supabase Anon Key</label>
-              <span class="setting-description">Your project's anon/public key</span>
+            <div class="setting-item">
+              <span class="setting-description sync-note">Local settings always take priority. Use "Push" to backup, "Pull" to restore.</span>
             </div>
-            <input type="password" id="settings-memory-supabase-key" class="text-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
-          </div>
-          <div class="setting-item setting-actions">
-            <button id="memory-test-connection" class="btn btn-secondary">Test Connection</button>
-            <span id="memory-connection-status" class="status-text"></span>
+
+            <div class="setting-divider"></div>
+
+            <div class="setting-item setting-item-row">
+              <div class="setting-info">
+                <label>Knowledge Registry</label>
+                <span class="setting-description">Migrate document list to Supabase for cross-device sync</span>
+              </div>
+              <span id="knowledge-sync-status" class="status-text">Not migrated</span>
+            </div>
+            <div class="setting-item setting-actions">
+              <button id="knowledge-migrate-btn" class="btn btn-secondary" disabled>
+                📤 Migrate to Cloud
+              </button>
+            </div>
+            <div class="setting-item">
+              <span class="setting-description sync-note">One-time migration of your document list from local to cloud storage.</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Personal Assistant Section (collapsible) -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="assistant">
-          <span class="section-icon">📧</span>
-          <span class="section-title">Personal Assistant</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="assistant-section">
-          <div class="setting-item setting-item-row">
-            <div class="setting-info">
-              <label>Enable Assistant</label>
-              <span class="setting-description">Access calendar, email, and tasks from Google</span>
-            </div>
-            <label class="settings-toggle">
-              <input type="checkbox" id="settings-assistant-enabled">
-              <span class="settings-toggle-slider"></span>
-            </label>
-          </div>
+      <!-- INTEGRATIONS -->
+      <div class="settings-category">
+        <div class="settings-category-header">
+          <span class="settings-category-title">Integrations</span>
+        </div>
 
-          <!-- Google Accounts List -->
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Google Accounts</label>
-              <span class="setting-description">Connected accounts for calendar, email, tasks</span>
+        <!-- Personal Assistant Section -->
+        <div class="settings-section">
+          <button class="settings-section-header" data-section="assistant">
+            <span class="section-icon">📧</span>
+            <span class="section-title">Personal Assistant</span>
+            <span class="section-arrow">›</span>
+          </button>
+          <div class="settings-section-content" id="assistant-section">
+            <div class="setting-item setting-item-row">
+              <div class="setting-info">
+                <label>Enable Assistant</label>
+                <span class="setting-description">Access calendar, email, and tasks from Google</span>
+              </div>
+              <label class="settings-toggle">
+                <input type="checkbox" id="settings-assistant-enabled">
+                <span class="settings-toggle-slider"></span>
+              </label>
             </div>
-          </div>
-          <div id="settings-assistant-accounts" class="assistant-accounts-list">
-            <span class="no-accounts">No accounts connected</span>
-          </div>
 
-          <div class="setting-item setting-actions">
-            <button id="assistant-add-account" class="btn btn-primary">+ Add Google Account</button>
+            <!-- Google Accounts List -->
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Google Accounts</label>
+                <span class="setting-description">Connected accounts for calendar, email, tasks</span>
+              </div>
+            </div>
+            <div id="settings-assistant-accounts" class="assistant-accounts-list">
+              <span class="no-accounts">No accounts connected</span>
+            </div>
+
+            <div class="setting-item setting-actions">
+              <button id="assistant-add-account" class="btn btn-primary">+ Add Google Account</button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Automation Section (collapsible) -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="automation">
-          <span class="section-icon">⏰</span>
-          <span class="section-title">Automations</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="automation-section">
-          <!-- Morning Email Toggle -->
-          <div class="setting-item setting-item-row">
-            <div class="setting-info">
-              <label>Morning Email</label>
-              <span class="setting-description">Daily personalized email with tasks, calendar, and knowledge highlights</span>
+        <!-- Automation Section -->
+        <div class="settings-section">
+          <button class="settings-section-header" data-section="automation">
+            <span class="section-icon">⏰</span>
+            <span class="section-title">Automations</span>
+            <span class="section-arrow">›</span>
+          </button>
+          <div class="settings-section-content" id="automation-section">
+            <!-- Morning Email Toggle -->
+            <div class="setting-item setting-item-row">
+              <div class="setting-info">
+                <label>Morning Email</label>
+                <span class="setting-description">Daily personalized email with tasks, calendar, and knowledge highlights</span>
+              </div>
+              <label class="settings-toggle">
+                <input type="checkbox" id="settings-automation-enabled">
+                <span class="settings-toggle-slider"></span>
+              </label>
             </div>
-            <label class="settings-toggle">
-              <input type="checkbox" id="settings-automation-enabled">
-              <span class="settings-toggle-slider"></span>
-            </label>
-          </div>
 
-          <!-- Time Picker -->
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Send Time</label>
-              <span class="setting-description">When to send the morning email (24h format)</span>
+            <!-- Time Picker -->
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Send Time</label>
+                <span class="setting-description">When to send the morning email (24h format)</span>
+              </div>
+              <input type="time" id="settings-automation-time" class="text-input" value="07:30">
             </div>
-            <input type="time" id="settings-automation-time" class="text-input" value="07:30">
-          </div>
 
-          <!-- Resend Configuration -->
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Resend API Key</label>
-              <span class="setting-description">Get from <a href="https://resend.com/api-keys" target="_blank">Resend dashboard</a></span>
+            <!-- Resend Configuration -->
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Resend API Key</label>
+                <span class="setting-description">Get from <a href="https://resend.com/api-keys" target="_blank">Resend dashboard</a></span>
+              </div>
+              <input type="password" id="settings-automation-resend-api-key" class="text-input" placeholder="re_xxxxxxxxx">
             </div>
-            <input type="password" id="settings-automation-resend-api-key" class="text-input" placeholder="re_xxxxxxxxx">
-          </div>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>From Email</label>
-              <span class="setting-description">Verified domain or onboarding@resend.dev</span>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>From Email</label>
+                <span class="setting-description">Verified domain or onboarding@resend.dev</span>
+              </div>
+              <input type="email" id="settings-automation-resend-from" class="text-input" placeholder="you@yourdomain.com">
             </div>
-            <input type="email" id="settings-automation-resend-from" class="text-input" placeholder="you@yourdomain.com">
-          </div>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>To Email</label>
-              <span class="setting-description">Where to send the morning email</span>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>To Email</label>
+                <span class="setting-description">Where to send the morning email</span>
+              </div>
+              <input type="email" id="settings-automation-resend-to" class="text-input" placeholder="you@email.com">
             </div>
-            <input type="email" id="settings-automation-resend-to" class="text-input" placeholder="you@email.com">
-          </div>
 
-          <!-- Google Account (Optional) -->
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Google Account</label>
-              <span class="setting-description">Optional - for calendar, tasks, email context</span>
+            <!-- Google Account (Optional) -->
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Google Account</label>
+                <span class="setting-description">Optional - for calendar, tasks, email context</span>
+              </div>
+              <select id="settings-automation-account" class="text-input">
+                <option value="">None (memories & knowledge only)</option>
+              </select>
             </div>
-            <select id="settings-automation-account" class="text-input">
-              <option value="">None (memories & knowledge only)</option>
-            </select>
-          </div>
 
-          <!-- Status and Test -->
-          <div class="setting-item setting-item-row">
-            <div class="setting-info">
-              <label>Status</label>
-              <span id="automation-status" class="setting-description">Disabled</span>
-            </div>
-            <button id="automation-test-now" class="btn btn-secondary">Send Now</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Cloud Sync Section (collapsible) -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="cloud-sync">
-          <span class="section-icon">☁️</span>
-          <span class="section-title">Cloud Sync</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="cloud-sync-section">
-          <div class="setting-item setting-item-row">
-            <div class="setting-info">
-              <label>Settings Sync</label>
-              <span class="setting-description">Sync your app settings to/from Supabase cloud</span>
-            </div>
-            <span id="settings-sync-status" class="status-text">Configure Supabase first</span>
-          </div>
-          <div class="setting-item setting-actions sync-actions">
-            <button id="settings-sync-pull" class="btn btn-secondary" disabled>
-              ↓ Pull from Cloud
-            </button>
-            <button id="settings-sync-push" class="btn btn-primary" disabled>
-              ↑ Push to Cloud
-            </button>
-          </div>
-          <div class="setting-item">
-            <span class="setting-description sync-note">Local settings always take priority. Use "Push" to backup, "Pull" to restore.</span>
-          </div>
-
-          <div class="setting-divider"></div>
-
-          <div class="setting-item setting-item-row">
-            <div class="setting-info">
-              <label>Knowledge Registry</label>
-              <span class="setting-description">Migrate document list to Supabase for cross-device sync</span>
-            </div>
-            <span id="knowledge-sync-status" class="status-text">Not migrated</span>
-          </div>
-          <div class="setting-item setting-actions">
-            <button id="knowledge-migrate-btn" class="btn btn-secondary" disabled>
-              📤 Migrate to Cloud
-            </button>
-          </div>
-          <div class="setting-item">
-            <span class="setting-description sync-note">One-time migration of your document list from local to cloud storage.</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- About Section (collapsible) -->
-      <div class="settings-section">
-        <button class="settings-section-header" data-section="about">
-          <span class="section-icon">ℹ️</span>
-          <span class="section-title">About</span>
-          <span class="section-arrow">›</span>
-        </button>
-        <div class="settings-section-content" id="about-section">
-          <div class="settings-about-info">
-            <div class="settings-about-row">
-              <span class="settings-about-label">Version</span>
-              <span class="settings-about-value" id="app-version">1.0.0</span>
+            <!-- Status and Test -->
+            <div class="setting-item setting-item-row">
+              <div class="setting-info">
+                <label>Status</label>
+                <span id="automation-status" class="setting-description">Disabled</span>
+              </div>
+              <button id="automation-test-now" class="btn btn-secondary">Send Now</button>
             </div>
           </div>
         </div>
