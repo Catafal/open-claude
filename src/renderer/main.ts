@@ -652,6 +652,10 @@ function initSettingsUI() {
   $('settings-memory-enabled')?.addEventListener('change', saveMemorySettings);
   $('settings-memory-supabase-url')?.addEventListener('blur', saveMemorySettings);
   $('settings-memory-supabase-key')?.addEventListener('blur', saveMemorySettings);
+
+  // Cloud Sync: Pull and Push buttons
+  $('settings-sync-pull')?.addEventListener('click', pullSettingsFromCloud);
+  $('settings-sync-push')?.addEventListener('click', pushSettingsToCloud);
 }
 
 function showSettings() {
@@ -911,6 +915,113 @@ async function testMemoryConnection() {
     status.className = 'status-text error';
   }
   testBtn.disabled = false;
+
+  // After successful connection, check cloud sync status
+  if (result?.success) {
+    await checkCloudSyncStatus();
+  }
+}
+
+// ============================================================================
+// Cloud Sync Functions
+// ============================================================================
+
+/**
+ * Check if cloud has settings and update sync UI.
+ */
+async function checkCloudSyncStatus() {
+  const status = $('settings-sync-status') as HTMLElement;
+  const pullBtn = $('settings-sync-pull') as HTMLButtonElement;
+  const pushBtn = $('settings-sync-push') as HTMLButtonElement;
+  if (!status || !pullBtn || !pushBtn) return;
+
+  status.textContent = 'Checking...';
+
+  try {
+    const result = await window.claude.settingsSyncHasCloud?.();
+
+    if (result?.error) {
+      status.textContent = 'Sync unavailable';
+      return;
+    }
+
+    if (result?.hasCloud) {
+      status.textContent = 'Cloud has settings';
+      status.className = 'status-text success';
+      pullBtn.disabled = false;
+    } else {
+      status.textContent = 'No cloud settings';
+      status.className = 'status-text';
+    }
+
+    // Always allow push
+    pushBtn.disabled = false;
+  } catch (error) {
+    status.textContent = 'Sync error';
+    status.className = 'status-text error';
+  }
+}
+
+/**
+ * Pull settings from cloud.
+ */
+async function pullSettingsFromCloud() {
+  const status = $('settings-sync-status') as HTMLElement;
+  const pullBtn = $('settings-sync-pull') as HTMLButtonElement;
+  if (!status || !pullBtn) return;
+
+  pullBtn.disabled = true;
+  status.textContent = 'Pulling...';
+
+  try {
+    const result = await window.claude.settingsSyncPull?.();
+
+    if (result?.success) {
+      status.textContent = 'Settings pulled!';
+      status.className = 'status-text success';
+      // Reload settings to reflect changes
+      await loadMemorySettings();
+      setTimeout(() => checkCloudSyncStatus(), 1500);
+    } else {
+      status.textContent = result?.error || 'Pull failed';
+      status.className = 'status-text error';
+    }
+  } catch (error) {
+    status.textContent = 'Pull failed';
+    status.className = 'status-text error';
+  } finally {
+    pullBtn.disabled = false;
+  }
+}
+
+/**
+ * Push local settings to cloud.
+ */
+async function pushSettingsToCloud() {
+  const status = $('settings-sync-status') as HTMLElement;
+  const pushBtn = $('settings-sync-push') as HTMLButtonElement;
+  if (!status || !pushBtn) return;
+
+  pushBtn.disabled = true;
+  status.textContent = 'Pushing...';
+
+  try {
+    const result = await window.claude.settingsSyncPush?.();
+
+    if (result?.success) {
+      status.textContent = 'Settings saved!';
+      status.className = 'status-text success';
+      setTimeout(() => checkCloudSyncStatus(), 1500);
+    } else {
+      status.textContent = result?.error || 'Push failed';
+      status.className = 'status-text error';
+    }
+  } catch (error) {
+    status.textContent = 'Push failed';
+    status.className = 'status-text error';
+  } finally {
+    pushBtn.disabled = false;
+  }
 }
 
 // ============================================================================

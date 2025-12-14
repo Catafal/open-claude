@@ -195,4 +195,9 @@ contextBridge.exposeInMainWorld('claude', {
   memorySaveSettings: (settings: { enabled?: boolean; supabaseUrl?: string; supabaseAnonKey?: string }) =>
     ipcRenderer.invoke('memory-save-settings', settings),
   memoryTestConnection: () => ipcRenderer.invoke('memory-test-connection'),
+
+  // Settings Sync (Cloud Storage) - LOCAL wins, cloud is backup
+  settingsSyncHasCloud: () => ipcRenderer.invoke('settings-sync-has-cloud'),
+  settingsSyncPull: () => ipcRenderer.invoke('settings-sync-pull'),
+  settingsSyncPush: () => ipcRenderer.invoke('settings-sync-push'),
 });

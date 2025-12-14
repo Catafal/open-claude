@@ -650,3 +650,120 @@ body {
     color: rgba(255, 255, 255, 0.6);
   }
 }
+
+/* =============================================================================
+   Settings Sync Section
+   ============================================================================= */
+
+.sync-status {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.sync-status.has-cloud {
+  color: #4cd964;
+}
+
+.sync-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.btn-secondary,
+.btn-primary {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+}
+
+.btn-secondary {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1a1a1a;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary {
+  background: #CC785C;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #b86a50;
+}
+
+.btn-secondary:disabled,
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-icon {
+  font-size: 14px;
+}
+
+.sync-note {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.5);
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Dark mode for sync section */
+@media (prefers-color-scheme: dark) {
+  .sync-status {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f0f0f0;
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .sync-note {
+    color: rgba(255, 255, 255, 0.5);
+  }
+}
+
+/* Memory input fields */
+#memory-supabase-url,
+#memory-supabase-key {
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  font-size: 13px;
+  font-family: 'SF Mono', Menlo, monospace;
+  color: #1a1a1a;
+  min-width: 240px;
+}
+
+#memory-supabase-url:focus,
+#memory-supabase-key:focus {
+  outline: none;
+  border-color: #CC785C;
+  box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+}
+
+/* Status indicator for unknown state */
+.status-indicator.status-unknown {
+  background: #8e8e93;
+}

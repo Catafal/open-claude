@@ -2625,6 +2625,35 @@
         </div>
       </div>
 
+      <!-- Cloud Sync Section (collapsible) -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="cloud-sync">
+          <span class="section-icon">☁️</span>
+          <span class="section-title">Cloud Sync</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="cloud-sync-section">
+          <div class="setting-item setting-item-row">
+            <div class="setting-info">
+              <label>Settings Sync</label>
+              <span class="setting-description">Sync your app settings to/from Supabase cloud</span>
+            </div>
+            <span id="settings-sync-status" class="status-text">Configure Supabase first</span>
+          </div>
+          <div class="setting-item setting-actions sync-actions">
+            <button id="settings-sync-pull" class="btn btn-secondary" disabled>
+              ↓ Pull from Cloud
+            </button>
+            <button id="settings-sync-push" class="btn btn-primary" disabled>
+              ↑ Push to Cloud
+            </button>
+          </div>
+          <div class="setting-item">
+            <span class="setting-description sync-note">Local settings always take priority. Use "Push" to backup, "Pull" to restore.</span>
+          </div>
+        </div>
+      </div>
+
       <!-- About Section (collapsible) -->
       <div class="settings-section">
         <button class="settings-section-header" data-section="about">

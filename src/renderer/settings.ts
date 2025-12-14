@@ -410,9 +410,127 @@ memorySupabaseKey?.addEventListener('blur', async () => {
 });
 
 // Memory test connection button
-memoryTestBtn?.addEventListener('click', () => {
-  testMemoryConnection();
+memoryTestBtn?.addEventListener('click', async () => {
+  await testMemoryConnection();
+  // After successful connection, check cloud status for sync
+  if (memoryStatusIndicator?.classList.contains('status-connected')) {
+    await checkCloudSyncStatus();
+  }
 });
+
+// ============================================================================
+// Settings Sync (Cloud Storage)
+// ============================================================================
+
+// Sync DOM elements
+const syncStatusText = document.getElementById('sync-status-text') as HTMLElement;
+const syncPullBtn = document.getElementById('sync-pull-btn') as HTMLButtonElement;
+const syncPushBtn = document.getElementById('sync-push-btn') as HTMLButtonElement;
+const settingsSyncSection = document.getElementById('settings-sync-section') as HTMLElement;
+
+/**
+ * Check if cloud has settings and update sync UI.
+ * Called after successful Supabase connection.
+ */
+async function checkCloudSyncStatus() {
+  if (!syncStatusText || !syncPullBtn || !syncPushBtn) return;
+
+  syncStatusText.textContent = 'Checking cloud...';
+  syncPullBtn.disabled = true;
+  syncPushBtn.disabled = true;
+
+  try {
+    const result = await claude.settingsSyncHasCloud();
+
+    if (result.error) {
+      syncStatusText.textContent = 'Sync unavailable';
+      return;
+    }
+
+    if (result.hasCloud) {
+      syncStatusText.textContent = 'Cloud has settings';
+      syncStatusText.classList.add('has-cloud');
+      syncPullBtn.disabled = false;  // Allow pull from cloud
+    } else {
+      syncStatusText.textContent = 'No cloud settings';
+      syncStatusText.classList.remove('has-cloud');
+    }
+
+    // Always allow push (to save local to cloud)
+    syncPushBtn.disabled = false;
+  } catch (error) {
+    syncStatusText.textContent = 'Sync error';
+    console.error('Failed to check cloud sync status:', error);
+  }
+}
+
+/**
+ * Pull settings from cloud and apply locally.
+ * Overwrites local settings with cloud values.
+ */
+async function pullFromCloud() {
+  if (!syncStatusText || !syncPullBtn) return;
+
+  const originalText = syncPullBtn.textContent;
+  syncPullBtn.textContent = 'Pulling...';
+  syncPullBtn.disabled = true;
+
+  try {
+    const result = await claude.settingsSyncPull();
+
+    if (result.success) {
+      syncStatusText.textContent = 'Settings pulled!';
+      // Reload all settings to reflect changes
+      await loadSettings();
+      await loadMemorySettings();
+      // Re-check status
+      setTimeout(() => checkCloudSyncStatus(), 1000);
+    } else {
+      syncStatusText.textContent = result.error || 'Pull failed';
+    }
+  } catch (error) {
+    syncStatusText.textContent = 'Pull failed';
+    console.error('Failed to pull settings from cloud:', error);
+  } finally {
+    syncPullBtn.innerHTML = '<span class="btn-icon">↓</span> Pull from Cloud';
+    syncPullBtn.disabled = false;
+  }
+}
+
+/**
+ * Push local settings to cloud.
+ * Overwrites cloud settings with local values.
+ */
+async function pushToCloud() {
+  if (!syncStatusText || !syncPushBtn) return;
+
+  const originalText = syncPushBtn.textContent;
+  syncPushBtn.textContent = 'Pushing...';
+  syncPushBtn.disabled = true;
+
+  try {
+    const result = await claude.settingsSyncPush();
+
+    if (result.success) {
+      syncStatusText.textContent = 'Settings saved to cloud!';
+      syncStatusText.classList.add('has-cloud');
+      // Re-check status
+      setTimeout(() => checkCloudSyncStatus(), 1000);
+    } else {
+      syncStatusText.textContent = result.error || 'Push failed';
+    }
+  } catch (error) {
+    syncStatusText.textContent = 'Push failed';
+    console.error('Failed to push settings to cloud:', error);
+  } finally {
+    syncPushBtn.innerHTML = '<span class="btn-icon">↑</span> Push to Cloud';
+    syncPushBtn.disabled = false;
+  }
+}
+
+// Sync button event listeners
+syncPullBtn?.addEventListener('click', pullFromCloud);
+syncPushBtn?.addEventListener('click', pushToCloud);
 
 // Load settings on page load
 window.addEventListener('load', () => {

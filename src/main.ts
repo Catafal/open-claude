@@ -49,6 +49,13 @@ import {
 } from './memory';
 import type { MemorySettingsStore } from './types';
 import { checkForUpdatesAndNotify } from './updater';
+import {
+  initSettingsSyncClient,
+  loadSettingsFromCloud,
+  saveSettingsToCloud,
+  hasCloudSettings,
+  type CloudSettings
+} from './settings';
 
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
@@ -1200,6 +1207,119 @@ ipcMain.handle('memory-test-connection', async () => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[Memory] Connection test failed:', errorMessage);
     return { success: false, error: errorMessage };
+  }
+});
+
+// ============================================================================
+// Settings Sync (Cloud Storage)
+// ============================================================================
+
+// Check if cloud has settings stored
+ipcMain.handle('settings-sync-has-cloud', async () => {
+  try {
+    if (!memorySettings.supabaseUrl || !memorySettings.supabaseAnonKey) {
+      return { hasCloud: false, error: 'Supabase not configured' };
+    }
+    initSettingsSyncClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+    const hasSettings = await hasCloudSettings();
+    return { hasCloud: hasSettings };
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { hasCloud: false, error: msg };
+  }
+});
+
+// Pull settings from cloud (only if local is empty/default)
+ipcMain.handle('settings-sync-pull', async () => {
+  try {
+    if (!memorySettings.supabaseUrl || !memorySettings.supabaseAnonKey) {
+      return { success: false, error: 'Supabase not configured' };
+    }
+
+    initSettingsSyncClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+    const cloudSettings = await loadSettingsFromCloud();
+
+    if (!cloudSettings) {
+      return { success: false, error: 'No settings found in cloud' };
+    }
+
+    // Apply cloud settings to local store (LOCAL wins, but this is explicit pull)
+    if (cloudSettings.settings && Object.keys(cloudSettings.settings).length > 0) {
+      const current = store.get('settings') || {};
+      store.set('settings', { ...DEFAULT_SETTINGS, ...cloudSettings.settings });
+    }
+
+    if (cloudSettings.knowledge_settings && Object.keys(cloudSettings.knowledge_settings).length > 0) {
+      // Merge with defaults to ensure full object
+      const merged = { ...DEFAULT_KNOWLEDGE_SETTINGS, ...cloudSettings.knowledge_settings };
+      store.set('knowledgeSettings', merged);
+      knowledgeSettings = merged as KnowledgeSettings;
+      // Reinitialize Qdrant
+      if (knowledgeSettings.qdrantUrl) {
+        initQdrantClient(knowledgeSettings);
+      }
+    }
+
+    if (cloudSettings.notion_settings && Object.keys(cloudSettings.notion_settings).length > 0) {
+      // Merge with defaults to ensure full object
+      const merged = { ...DEFAULT_NOTION_SETTINGS, ...cloudSettings.notion_settings };
+      store.set('notionSettings', merged);
+      notionSettings = merged as NotionSettings;
+      // Reinitialize Notion
+      if (notionSettings.notionToken) {
+        initNotionClient(notionSettings.notionToken);
+      }
+    }
+
+    if (cloudSettings.rag_settings && Object.keys(cloudSettings.rag_settings).length > 0) {
+      // Merge with defaults to ensure full object
+      const merged = { ...DEFAULT_RAG_SETTINGS, ...cloudSettings.rag_settings };
+      store.set('ragSettings', merged);
+      ragSettings = merged as RAGSettings;
+      // Reinitialize Ollama
+      if (ragSettings.ollamaUrl) {
+        initOllamaClient(ragSettings.ollamaUrl);
+      }
+    }
+
+    console.log('[SettingsSync] Pulled settings from cloud');
+    return { success: true };
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[SettingsSync] Pull failed:', msg);
+    return { success: false, error: msg };
+  }
+});
+
+// Push local settings to cloud (overwrites cloud)
+ipcMain.handle('settings-sync-push', async () => {
+  try {
+    if (!memorySettings.supabaseUrl || !memorySettings.supabaseAnonKey) {
+      return { success: false, error: 'Supabase not configured' };
+    }
+
+    initSettingsSyncClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
+
+    // Gather all current settings (exclude memorySettings - chicken/egg)
+    const cloudSettings: CloudSettings = {
+      settings: store.get('settings') || {},
+      knowledge_settings: store.get('knowledgeSettings') || {},
+      notion_settings: store.get('notionSettings') || {},
+      rag_settings: store.get('ragSettings') || {}
+    };
+
+    const success = await saveSettingsToCloud(cloudSettings);
+
+    if (success) {
+      console.log('[SettingsSync] Pushed settings to cloud');
+      return { success: true };
+    } else {
+      return { success: false, error: 'Failed to save to cloud' };
+    }
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[SettingsSync] Push failed:', msg);
+    return { success: false, error: msg };
   }
 });
 
