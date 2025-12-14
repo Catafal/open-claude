@@ -14,12 +14,21 @@ import type {
   SettingsSchema,
   KnowledgeSettingsStore,
   NotionSettingsStore,
-  RAGSettingsStore
+  RAGSettingsStore,
+  AssistantSettingsStore
 } from '../types';
 
 // ============================================================
 // Types
 // ============================================================
+
+// Assistant settings for cloud sync (credentials only, NOT tokens for security)
+interface CloudAssistantSettings {
+  enabled: boolean;
+  googleClientId?: string;
+  googleClientSecret?: string;
+  // NOTE: googleAccounts[] is NOT synced - tokens stay local for security
+}
 
 // Settings stored in Supabase (excludes memorySettings - chicken/egg)
 export interface CloudSettings {
@@ -27,6 +36,7 @@ export interface CloudSettings {
   knowledge_settings: Partial<KnowledgeSettingsStore>;
   notion_settings: Partial<NotionSettingsStore>;
   rag_settings: Partial<RAGSettingsStore>;
+  assistant_settings?: Partial<CloudAssistantSettings>;
 }
 
 // Database row shape
@@ -36,6 +46,7 @@ interface UserSettingsRow {
   knowledge_settings: Partial<KnowledgeSettingsStore>;
   notion_settings: Partial<NotionSettingsStore>;
   rag_settings: Partial<RAGSettingsStore>;
+  assistant_settings?: Partial<CloudAssistantSettings>;
   created_at: string;
   updated_at: string;
 }
@@ -116,7 +127,8 @@ export async function loadSettingsFromCloud(): Promise<CloudSettings | null> {
       settings: row.settings || {},
       knowledge_settings: row.knowledge_settings || {},
       notion_settings: row.notion_settings || {},
-      rag_settings: row.rag_settings || {}
+      rag_settings: row.rag_settings || {},
+      assistant_settings: row.assistant_settings || {}
     };
   } catch (err) {
     console.error('[SettingsSync] Error loading from cloud:', err);
@@ -147,7 +159,8 @@ export async function saveSettingsToCloud(settings: CloudSettings): Promise<bool
           settings: settings.settings,
           knowledge_settings: settings.knowledge_settings,
           notion_settings: settings.notion_settings,
-          rag_settings: settings.rag_settings
+          rag_settings: settings.rag_settings,
+          assistant_settings: settings.assistant_settings
         })
         .eq('id', existing.id);
 
@@ -163,7 +176,8 @@ export async function saveSettingsToCloud(settings: CloudSettings): Promise<bool
           settings: settings.settings,
           knowledge_settings: settings.knowledge_settings,
           notion_settings: settings.notion_settings,
-          rag_settings: settings.rag_settings
+          rag_settings: settings.rag_settings,
+          assistant_settings: settings.assistant_settings
         });
 
       if (error) {

@@ -419,6 +419,154 @@ memoryTestBtn?.addEventListener('click', async () => {
 });
 
 // ============================================================================
+// Personal Assistant Settings (Google Services)
+// ============================================================================
+
+// Assistant DOM elements
+const assistantEnabledCheckbox = document.getElementById('assistant-enabled') as HTMLInputElement;
+const assistantOptions = document.getElementById('assistant-options') as HTMLElement;
+const assistantClientId = document.getElementById('assistant-client-id') as HTMLInputElement;
+const assistantClientSecret = document.getElementById('assistant-client-secret') as HTMLInputElement;
+const assistantAccountsList = document.getElementById('assistant-accounts-list') as HTMLElement;
+const assistantAddAccountBtn = document.getElementById('assistant-add-account-btn') as HTMLButtonElement;
+
+// Assistant settings state
+interface GoogleAccount {
+  email: string;
+  enabled: boolean;
+}
+
+interface AssistantSettings {
+  enabled: boolean;
+  googleAccounts: GoogleAccount[];
+  googleClientId?: string;
+  googleClientSecret?: string;
+}
+
+let assistantSettings: AssistantSettings | null = null;
+
+/**
+ * Load assistant settings from backend.
+ */
+async function loadAssistantSettings() {
+  try {
+    assistantSettings = await claude.assistantGetSettings();
+
+    if (assistantSettings && assistantEnabledCheckbox) {
+      assistantEnabledCheckbox.checked = assistantSettings.enabled;
+    }
+    if (assistantSettings && assistantClientId) {
+      assistantClientId.value = assistantSettings.googleClientId || '';
+    }
+    if (assistantSettings && assistantClientSecret) {
+      assistantClientSecret.value = assistantSettings.googleClientSecret || '';
+    }
+
+    renderAssistantAccounts();
+  } catch (error) {
+    console.error('Failed to load assistant settings:', error);
+  }
+}
+
+/**
+ * Render the list of connected Google accounts.
+ */
+function renderAssistantAccounts() {
+  if (!assistantAccountsList || !assistantSettings) return;
+
+  const accounts = assistantSettings.googleAccounts || [];
+
+  if (accounts.length === 0) {
+    assistantAccountsList.innerHTML = '<div class="no-accounts">No Google accounts connected</div>';
+    return;
+  }
+
+  assistantAccountsList.innerHTML = accounts.map(account => `
+    <div class="account-item" data-email="${account.email}">
+      <div class="account-info">
+        <span class="account-email">${account.email}</span>
+        <span class="account-status ${account.enabled ? 'enabled' : 'disabled'}">
+          ${account.enabled ? 'Active' : 'Disabled'}
+        </span>
+      </div>
+      <div class="account-actions">
+        <button class="btn-small account-toggle" data-email="${account.email}" data-enabled="${account.enabled}">
+          ${account.enabled ? 'Disable' : 'Enable'}
+        </button>
+        <button class="btn-small btn-danger account-remove" data-email="${account.email}">
+          Remove
+        </button>
+      </div>
+    </div>
+  `).join('');
+
+  // Add event listeners to account buttons
+  assistantAccountsList.querySelectorAll('.account-toggle').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const email = (e.target as HTMLElement).dataset.email;
+      const enabled = (e.target as HTMLElement).dataset.enabled === 'true';
+      if (email) {
+        await claude.assistantToggleAccount(email, !enabled);
+        await loadAssistantSettings();
+      }
+    });
+  });
+
+  assistantAccountsList.querySelectorAll('.account-remove').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const email = (e.target as HTMLElement).dataset.email;
+      if (email && confirm(`Remove Google account ${email}?`)) {
+        await claude.assistantRemoveGoogleAccount(email);
+        await loadAssistantSettings();
+      }
+    });
+  });
+}
+
+// Assistant enabled toggle
+assistantEnabledCheckbox?.addEventListener('change', async () => {
+  if (!assistantSettings) return;
+  await claude.assistantSaveSettings({ enabled: assistantEnabledCheckbox.checked });
+  assistantSettings.enabled = assistantEnabledCheckbox.checked;
+});
+
+// Assistant Client ID - save on blur
+assistantClientId?.addEventListener('blur', async () => {
+  if (!assistantSettings) return;
+  await claude.assistantSaveSettings({ googleClientId: assistantClientId.value });
+  assistantSettings.googleClientId = assistantClientId.value;
+});
+
+// Assistant Client Secret - save on blur
+assistantClientSecret?.addEventListener('blur', async () => {
+  if (!assistantSettings) return;
+  await claude.assistantSaveSettings({ googleClientSecret: assistantClientSecret.value });
+  assistantSettings.googleClientSecret = assistantClientSecret.value;
+});
+
+// Add Google Account button
+assistantAddAccountBtn?.addEventListener('click', async () => {
+  assistantAddAccountBtn.disabled = true;
+  assistantAddAccountBtn.textContent = 'Connecting...';
+
+  try {
+    const result = await claude.assistantAddGoogleAccount();
+
+    if (result.success) {
+      await loadAssistantSettings();
+    } else {
+      alert(`Failed to add account: ${result.error || 'Unknown error'}`);
+    }
+  } catch (error) {
+    console.error('Failed to add Google account:', error);
+    alert('Failed to add Google account. Check console for details.');
+  } finally {
+    assistantAddAccountBtn.disabled = false;
+    assistantAddAccountBtn.innerHTML = '<span class="btn-icon">+</span> Add Google Account';
+  }
+});
+
+// ============================================================================
 // Settings Sync (Cloud Storage)
 // ============================================================================
 
@@ -483,6 +631,7 @@ async function pullFromCloud() {
       // Reload all settings to reflect changes
       await loadSettings();
       await loadMemorySettings();
+      await loadAssistantSettings();
       // Re-check status
       setTimeout(() => checkCloudSyncStatus(), 1000);
     } else {
@@ -536,4 +685,5 @@ syncPushBtn?.addEventListener('click', pushToCloud);
 window.addEventListener('load', () => {
   loadSettings();
   loadMemorySettings();
+  loadAssistantSettings();
 });

@@ -51,6 +51,22 @@ export interface MemorySettingsStore {
   supabaseAnonKey: string;
 }
 
+// Assistant settings (for StoreSchema) - Google services integration
+export interface GoogleAccount {
+  email: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  enabled: boolean;
+}
+
+export interface AssistantSettingsStore {
+  enabled: boolean;
+  googleAccounts: GoogleAccount[];
+  googleClientId?: string;
+  googleClientSecret?: string;
+}
+
 // Memory types for extraction and storage
 export type MemoryCategory = 'factual' | 'preference' | 'relationship' | 'temporal';
 
@@ -77,6 +93,7 @@ export interface StoreSchema {
   notionSettings?: NotionSettingsStore;
   ragSettings?: RAGSettingsStore;
   memorySettings?: MemorySettingsStore;
+  assistantSettings?: AssistantSettingsStore;  // Google services integration
 }
 
 // File attachment payloads

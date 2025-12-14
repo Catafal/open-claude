@@ -214,6 +214,96 @@
         </div>
       </div>
 
+      <!-- Personal Assistant Section (Google Services) -->
+      <div class="settings-section">
+        <h2>Personal Assistant</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Enable Assistant</label>
+            <span class="setting-description">Access calendar, email, and tasks from Google</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="assistant-enabled">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div id="assistant-options">
+          <!-- Google OAuth Credentials (optional - for advanced users) -->
+          <div class="setting-item collapsible">
+            <details>
+              <summary class="setting-info">
+                <label>OAuth Credentials (Optional)</label>
+                <span class="setting-description">Use your own Google Cloud credentials</span>
+              </summary>
+              <div class="credentials-inputs">
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label for="assistant-client-id">Client ID</label>
+                    <span class="setting-description">From Google Cloud Console</span>
+                  </div>
+                  <input type="text" id="assistant-client-id" placeholder="xxxxx.apps.googleusercontent.com">
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label for="assistant-client-secret">Client Secret</label>
+                    <span class="setting-description">Keep this private</span>
+                  </div>
+                  <input type="password" id="assistant-client-secret" placeholder="GOCSPX-xxxxx">
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <!-- Connected Accounts -->
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Google Accounts</label>
+              <span class="setting-description">Connected accounts for calendar, email, and tasks</span>
+            </div>
+          </div>
+
+          <div id="assistant-accounts-list" class="accounts-list">
+            <!-- Populated dynamically -->
+            <div class="no-accounts">No Google accounts connected</div>
+          </div>
+
+          <button id="assistant-add-account-btn" class="btn-primary">
+            <span class="btn-icon">+</span> Add Google Account
+          </button>
+
+          <!-- Setup Guide -->
+          <div class="assistant-setup-guide">
+            <h3>How It Works</h3>
+            <div class="setup-steps">
+              <div class="setup-step">
+                <span class="step-number">1</span>
+                <div class="step-content">
+                  <strong>Connect your Google account</strong>
+                  <span class="step-hint">Click "Add Google Account" to authorize access</span>
+                </div>
+              </div>
+              <div class="setup-step">
+                <span class="step-number">2</span>
+                <div class="step-content">
+                  <strong>Ask about your schedule</strong>
+                  <span class="step-hint">"What meetings do I have today?"</span>
+                </div>
+              </div>
+              <div class="setup-step">
+                <span class="step-number">3</span>
+                <div class="step-content">
+                  <strong>Ask about emails or tasks</strong>
+                  <span class="step-hint">"Any unread emails?" or "What's on my to-do list?"</span>
+                </div>
+              </div>
+            </div>
+            <p class="setup-note">All data access is read-only. We never modify your calendar, emails, or tasks.</p>
+          </div>
+        </div>
+      </div>
+
       <!-- Cloud Sync Section - Separate from Memory -->
       <div class="settings-section">
         <h2>Cloud Sync</h2>

@@ -2481,6 +2481,33 @@
     </div>
   </div>
 
+  <!-- Add Google Account Modal (placed outside view containers for global visibility) -->
+  <div id="google-account-modal" class="import-modal">
+    <div class="import-modal-content">
+      <div class="import-modal-header">
+        <span class="import-modal-title">Add Google Account</span>
+        <button id="google-account-modal-close" class="import-modal-close">&times;</button>
+      </div>
+      <div class="import-modal-body">
+        <p class="modal-description">Enter your Google Cloud OAuth credentials to connect your account.</p>
+        <div class="import-field">
+          <label>Client ID</label>
+          <input type="text" id="modal-google-client-id" class="text-input" placeholder="xxxxx.apps.googleusercontent.com">
+        </div>
+        <div class="import-field">
+          <label>Client Secret</label>
+          <input type="password" id="modal-google-client-secret" class="text-input" placeholder="GOCSPX-xxxxx">
+        </div>
+        <p class="setting-hint">Get credentials from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></p>
+        <div class="import-actions">
+          <button id="google-account-connect" class="btn btn-primary">Connect</button>
+          <button id="google-account-cancel" class="btn btn-secondary">Cancel</button>
+          <span id="google-account-status" class="status-text"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Settings View (Unified - all settings in one place) -->
   <div id="settings" class="settings-view-container">
     <div class="settings-view-header">
@@ -2682,6 +2709,42 @@
           <div class="setting-item setting-actions">
             <button id="memory-test-connection" class="btn btn-secondary">Test Connection</button>
             <span id="memory-connection-status" class="status-text"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Personal Assistant Section (collapsible) -->
+      <div class="settings-section">
+        <button class="settings-section-header" data-section="assistant">
+          <span class="section-icon">📧</span>
+          <span class="section-title">Personal Assistant</span>
+          <span class="section-arrow">›</span>
+        </button>
+        <div class="settings-section-content" id="assistant-section">
+          <div class="setting-item setting-item-row">
+            <div class="setting-info">
+              <label>Enable Assistant</label>
+              <span class="setting-description">Access calendar, email, and tasks from Google</span>
+            </div>
+            <label class="settings-toggle">
+              <input type="checkbox" id="settings-assistant-enabled">
+              <span class="settings-toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- Google Accounts List -->
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Google Accounts</label>
+              <span class="setting-description">Connected accounts for calendar, email, tasks</span>
+            </div>
+          </div>
+          <div id="settings-assistant-accounts" class="assistant-accounts-list">
+            <span class="no-accounts">No accounts connected</span>
+          </div>
+
+          <div class="setting-item setting-actions">
+            <button id="assistant-add-account" class="btn btn-primary">+ Add Google Account</button>
           </div>
         </div>
       </div>

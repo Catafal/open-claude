@@ -198,6 +198,18 @@ contextBridge.exposeInMainWorld('claude', {
     ipcRenderer.invoke('memory-save-settings', settings),
   memoryTestConnection: () => ipcRenderer.invoke('memory-test-connection'),
 
+  // Personal Assistant Settings (Google Services)
+  assistantGetSettings: () => ipcRenderer.invoke('assistant-get-settings'),
+  assistantSaveSettings: (settings: { enabled?: boolean; googleClientId?: string; googleClientSecret?: string }) =>
+    ipcRenderer.invoke('assistant-save-settings', settings),
+  assistantAddGoogleAccount: () => ipcRenderer.invoke('assistant-add-google-account'),
+  assistantRemoveGoogleAccount: (email: string) =>
+    ipcRenderer.invoke('assistant-remove-google-account', email),
+  assistantToggleAccount: (email: string, enabled: boolean) =>
+    ipcRenderer.invoke('assistant-toggle-account', email, enabled),
+  assistantTestConnection: (email: string) => ipcRenderer.invoke('assistant-test-connection', email),
+  assistantGetAccountsTokenStatus: () => ipcRenderer.invoke('assistant-get-accounts-token-status'),
+
   // Settings Sync (Cloud Storage) - LOCAL wins, cloud is backup
   settingsSyncHasCloud: () => ipcRenderer.invoke('settings-sync-has-cloud'),
   settingsSyncPull: () => ipcRenderer.invoke('settings-sync-pull'),

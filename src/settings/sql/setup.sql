@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS user_settings (
   -- RAG agent settings (Ollama)
   rag_settings JSONB DEFAULT '{}',
 
+  -- Personal Assistant settings (Google OAuth credentials, NOT tokens)
+  assistant_settings JSONB DEFAULT '{}',
+
   -- Timestamps for sync tracking
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -113,3 +116,13 @@ CREATE POLICY "Allow all for anon knowledge" ON knowledge_documents
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_documents_date
   ON knowledge_documents(date_added DESC);
+
+-- ============================================================
+-- Migrations for existing databases
+-- ============================================================
+-- Run these if you already have the user_settings table created
+-- and need to add new columns.
+
+-- Add assistant_settings column (Dec 2024)
+ALTER TABLE user_settings
+ADD COLUMN IF NOT EXISTS assistant_settings JSONB DEFAULT '{}';

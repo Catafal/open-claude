@@ -693,6 +693,22 @@ function initSettingsUI() {
   $('settings-memory-supabase-url')?.addEventListener('blur', saveMemorySettings);
   $('settings-memory-supabase-key')?.addEventListener('blur', saveMemorySettings);
 
+  // Personal Assistant: Add account button (opens modal)
+  $('assistant-add-account')?.addEventListener('click', showGoogleAccountModal);
+
+  // Personal Assistant: Enable toggle
+  $('settings-assistant-enabled')?.addEventListener('change', saveAssistantSettings);
+
+  // Google Account Modal: close, cancel, connect, backdrop click
+  $('google-account-modal-close')?.addEventListener('click', hideGoogleAccountModal);
+  $('google-account-cancel')?.addEventListener('click', hideGoogleAccountModal);
+  $('google-account-connect')?.addEventListener('click', connectGoogleAccount);
+  $('google-account-modal')?.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).classList.contains('import-modal')) {
+      hideGoogleAccountModal();
+    }
+  });
+
   // Cloud Sync: Pull and Push buttons
   $('settings-sync-pull')?.addEventListener('click', pullSettingsFromCloud);
   $('settings-sync-push')?.addEventListener('click', pushSettingsToCloud);
@@ -731,6 +747,7 @@ function showSettings() {
   loadNotionSettings();       // Notion
   loadRagSettings();          // RAG Agent
   loadMemorySettings();       // Memory
+  loadAssistantSettings();    // Personal Assistant (Google services)
 }
 
 // Knowledge UI functions
@@ -964,6 +981,240 @@ async function testMemoryConnection() {
   // After successful connection, check cloud sync status
   if (result?.success) {
     await checkCloudSyncStatus();
+  }
+}
+
+// ============================================================================
+// Personal Assistant Functions (Google Services)
+// ============================================================================
+
+/**
+ * Load assistant settings and render accounts list.
+ */
+async function loadAssistantSettings() {
+  const enabled = $('settings-assistant-enabled') as HTMLInputElement;
+  if (!enabled) return;
+
+  const settings = await window.claude.assistantGetSettings?.();
+  if (!settings) return;
+
+  enabled.checked = settings.enabled !== false;
+
+  // Get token status for each account
+  const tokenStatus = await window.claude.assistantGetAccountsTokenStatus?.() || [];
+  const tokenStatusMap = new Map(tokenStatus.map((s: { email: string; hasValidTokens: boolean }) => [s.email, s.hasValidTokens]));
+
+  renderAssistantAccounts(settings.googleAccounts || [], tokenStatusMap);
+}
+
+/**
+ * Save assistant settings (enable toggle).
+ */
+async function saveAssistantSettings() {
+  const enabled = $('settings-assistant-enabled') as HTMLInputElement;
+  if (!enabled) return;
+
+  await window.claude.assistantSaveSettings?.({ enabled: enabled.checked });
+}
+
+/**
+ * Render the list of connected Google accounts.
+ * Shows Reconnect button when account needs re-authentication.
+ */
+function renderAssistantAccounts(
+  accounts: Array<{ email: string; enabled: boolean }>,
+  tokenStatusMap: Map<string, boolean> = new Map()
+) {
+  const container = $('settings-assistant-accounts');
+  if (!container) return;
+
+  if (accounts.length === 0) {
+    container.innerHTML = '<span class="no-accounts">No accounts connected</span>';
+    return;
+  }
+
+  container.innerHTML = accounts.map(acc => {
+    const hasValidTokens = tokenStatusMap.get(acc.email) ?? true;
+    const needsReconnect = !hasValidTokens;
+
+    // Determine status display
+    let statusClass = acc.enabled ? 'active' : 'disabled';
+    let statusText = acc.enabled ? 'Active' : 'Disabled';
+    if (needsReconnect) {
+      statusClass = 'needs-reconnect';
+      statusText = 'Needs Reconnect';
+    }
+
+    return `
+      <div class="assistant-account-item" data-email="${acc.email}">
+        <span class="account-email">${acc.email}</span>
+        <span class="account-status ${statusClass}">${statusText}</span>
+        ${needsReconnect ? `
+          <button class="btn btn-small btn-reconnect" data-email="${acc.email}">Reconnect</button>
+        ` : `
+          <button class="btn btn-small btn-toggle" data-email="${acc.email}" data-enabled="${acc.enabled}">
+            ${acc.enabled ? 'Disable' : 'Enable'}
+          </button>
+        `}
+        <button class="btn btn-small btn-danger btn-remove" data-email="${acc.email}">Remove</button>
+      </div>
+    `;
+  }).join('');
+
+  // Attach reconnect handlers
+  container.querySelectorAll('.btn-reconnect').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const target = e.target as HTMLButtonElement;
+      const email = target.dataset.email;
+      if (email) {
+        // Trigger OAuth flow - it will update the existing account
+        target.textContent = 'Connecting...';
+        target.disabled = true;
+        const result = await window.claude.assistantAddGoogleAccount?.();
+        if (result?.success) {
+          await loadAssistantSettings();
+        } else {
+          target.textContent = 'Reconnect';
+          target.disabled = false;
+          alert(result?.error || 'Reconnection failed');
+        }
+      }
+    });
+  });
+
+  // Attach toggle handlers
+  container.querySelectorAll('.btn-toggle').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const target = e.target as HTMLButtonElement;
+      const email = target.dataset.email;
+      const enabled = target.dataset.enabled === 'true';
+      if (email) {
+        await window.claude.assistantToggleAccount?.(email, !enabled);
+        await loadAssistantSettings();
+      }
+    });
+  });
+
+  // Attach remove handlers
+  container.querySelectorAll('.btn-remove').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const target = e.target as HTMLButtonElement;
+      const email = target.dataset.email;
+      if (email && confirm(`Remove Google account ${email}?`)) {
+        await window.claude.assistantRemoveGoogleAccount?.(email);
+        await loadAssistantSettings();
+      }
+    });
+  });
+}
+
+// ============================================================================
+// Google Account Modal Functions
+// ============================================================================
+
+/**
+ * Show the Google Account modal. Pre-fills credentials if they exist.
+ */
+async function showGoogleAccountModal() {
+  const modal = $('google-account-modal');
+  const clientIdInput = $('modal-google-client-id') as HTMLInputElement;
+  const clientSecretInput = $('modal-google-client-secret') as HTMLInputElement;
+  const status = $('google-account-status');
+
+  // Pre-fill existing credentials
+  const settings = await window.claude.assistantGetSettings?.();
+  if (settings?.googleClientId && clientIdInput) {
+    clientIdInput.value = settings.googleClientId;
+  }
+  if (settings?.googleClientSecret && clientSecretInput) {
+    clientSecretInput.value = settings.googleClientSecret;
+  }
+
+  // Reset status
+  if (status) {
+    status.textContent = '';
+    status.className = 'status-text';
+  }
+
+  if (modal) modal.classList.add('open');
+}
+
+/**
+ * Hide the Google Account modal and reset status.
+ */
+function hideGoogleAccountModal() {
+  const modal = $('google-account-modal');
+  const status = $('google-account-status');
+
+  if (modal) modal.classList.remove('open');
+  if (status) {
+    status.textContent = '';
+    status.className = 'status-text';
+  }
+}
+
+/**
+ * Connect Google account: save credentials and start OAuth flow.
+ */
+async function connectGoogleAccount() {
+  const clientId = ($('modal-google-client-id') as HTMLInputElement)?.value.trim();
+  const clientSecret = ($('modal-google-client-secret') as HTMLInputElement)?.value.trim();
+  const status = $('google-account-status');
+  const connectBtn = $('google-account-connect') as HTMLButtonElement;
+
+  // Validate inputs
+  if (!clientId || !clientSecret) {
+    if (status) {
+      status.textContent = 'Please fill in both fields';
+      status.className = 'status-text error';
+    }
+    return;
+  }
+
+  // UI: show loading state
+  if (connectBtn) {
+    connectBtn.disabled = true;
+    connectBtn.textContent = 'Connecting...';
+  }
+  if (status) {
+    status.textContent = '';
+    status.className = 'status-text';
+  }
+
+  try {
+    // 1. Save credentials first
+    await window.claude.assistantSaveSettings?.({
+      googleClientId: clientId,
+      googleClientSecret: clientSecret
+    });
+
+    // 2. Start OAuth flow
+    const result = await window.claude.assistantAddGoogleAccount?.();
+
+    if (result?.success) {
+      if (status) {
+        status.textContent = 'Connected!';
+        status.className = 'status-text success';
+      }
+      await loadAssistantSettings(); // Refresh accounts list
+      setTimeout(hideGoogleAccountModal, 1000);
+    } else {
+      if (status) {
+        status.textContent = result?.error || 'Connection failed';
+        status.className = 'status-text error';
+      }
+    }
+  } catch (err) {
+    console.error('Failed to connect Google account:', err);
+    if (status) {
+      status.textContent = 'Failed to connect';
+      status.className = 'status-text error';
+    }
+  } finally {
+    if (connectBtn) {
+      connectBtn.disabled = false;
+      connectBtn.textContent = 'Connect';
+    }
   }
 }
 

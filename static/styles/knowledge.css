@@ -645,6 +645,78 @@ body {
   background: rgba(200, 60, 60, 0.1) !important;
 }
 
+/* Personal Assistant Accounts List */
+.assistant-accounts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.assistant-accounts-list .no-accounts {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+  padding: 12px;
+}
+
+.assistant-account-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.assistant-account-item .account-email {
+  flex: 1;
+  font-weight: 500;
+}
+
+.assistant-account-item .account-status {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #e0e0e0;
+  color: #666;
+}
+
+.assistant-account-item .account-status.active {
+  background: #d4edda;
+  color: #155724;
+}
+
+.assistant-account-item .account-status.disabled {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.assistant-account-item .account-status.needs-reconnect {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.assistant-account-item .btn-reconnect {
+  background: #ffc107;
+  color: #212529;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.assistant-account-item .btn-reconnect:hover {
+  background: #e0a800;
+}
+
+.assistant-account-item .btn-reconnect:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Import Notion Modal */
 .import-modal {
   position: fixed;
@@ -714,6 +786,12 @@ body {
 .import-modal-body {
   padding: 20px;
   overflow-y: auto;
+}
+
+.modal-description {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 16px;
 }
 
 .import-field {

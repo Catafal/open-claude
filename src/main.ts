@@ -78,6 +78,19 @@ import {
   type CreatePromptInput,
   type UpdatePromptInput
 } from './prompts';
+import {
+  getAssistantSettings,
+  saveAssistantSettings,
+  startOAuthFlow,
+  removeGoogleAccount,
+  toggleAccountEnabled,
+  testAccountConnection,
+  isAssistantReady,
+  processAssistantQuery,
+  formatAssistantContext,
+  getAccountsTokenStatus,
+  type AssistantSettingsStore
+} from './assistant';
 
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
@@ -102,6 +115,13 @@ const DEFAULT_MEMORY_SETTINGS: MemorySettingsStore = {
 
 // Memory settings (loaded from store)
 let memorySettings: MemorySettingsStore = { ...DEFAULT_MEMORY_SETTINGS };
+
+// Assistant settings defaults (Google services)
+const DEFAULT_ASSISTANT_SETTINGS: AssistantSettingsStore = {
+  enabled: false,
+  googleAccounts: []
+};
+let assistantSettings: AssistantSettingsStore = { ...DEFAULT_ASSISTANT_SETTINGS };
 
 // Default settings
 const DEFAULT_SETTINGS: SettingsSchema = {
@@ -453,9 +473,10 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
     }
   };
 
-  // === Memory + RAG Processing for Spotlight ===
+  // === Memory + Assistant + RAG Processing for Spotlight ===
   let finalPrompt = promptWithSystem;
   let memoryContext = '';
+  let assistantContext = '';
 
   // Retrieve relevant memories if enabled
   if (memorySettings.enabled && knowledgeSettings.collectionName) {
@@ -466,6 +487,43 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
       }
     } catch (memError: unknown) {
       console.error('[Memory/Spotlight] Error retrieving memories:', memError);
+    }
+  }
+
+  // Personal Assistant: Check if query needs Google data (calendar, email, tasks)
+  if (assistantSettings.enabled && isAssistantReady()) {
+    try {
+      spotlightWindow?.webContents.send('spotlight-assistant', {
+        status: 'analyzing',
+        message: 'Checking personal data...'
+      });
+
+      const assistantResult = await processAssistantQuery(
+        message,
+        ragSettings.model  // Use same Ollama model as RAG
+      );
+
+      if (assistantResult.decision.needs_google && assistantResult.contexts.length > 0) {
+        spotlightWindow?.webContents.send('spotlight-assistant', {
+          status: 'complete',
+          message: `Found ${assistantResult.contexts.length} data sources`
+        });
+
+        assistantContext = formatAssistantContext(assistantResult.contexts);
+        console.log(`[Assistant/Spotlight] Injected context from services: ${assistantResult.decision.services?.join(', ')}`);
+      } else {
+        spotlightWindow?.webContents.send('spotlight-assistant', {
+          status: 'skipped',
+          message: ''
+        });
+      }
+    } catch (assistantError: unknown) {
+      const errorMessage = assistantError instanceof Error ? assistantError.message : String(assistantError);
+      console.error('[Assistant/Spotlight] Error (continuing):', errorMessage);
+      spotlightWindow?.webContents.send('spotlight-assistant', {
+        status: 'error',
+        message: 'Assistant unavailable'
+      });
     }
   }
 
@@ -497,7 +555,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
         });
 
         // Inject memories + knowledge context + cleaned query
-        finalPrompt = memoryContext + formatContextForClaude(ragResult.contexts) + cleanedPromptWithSystem;
+        finalPrompt = memoryContext + assistantContext + formatContextForClaude(ragResult.contexts) + cleanedPromptWithSystem;
         console.log(`[RAG/Spotlight] Injected ${ragResult.contexts.length} context chunks`);
         console.log(`[RAG/Spotlight] Cleaned query: "${cleanedQuery}"`);
       } else if (ragResult.decision.needs_retrieval) {
@@ -506,7 +564,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
           status: 'skipped',
           message: 'No matching content'
         });
-        finalPrompt = memoryContext + cleanedPromptWithSystem;
+        finalPrompt = memoryContext + assistantContext + cleanedPromptWithSystem;
         console.log(`[RAG/Spotlight] No results, using cleaned query: "${cleanedQuery}"`);
       } else {
         // Notify Spotlight UI: No retrieval needed, but still include memories
@@ -514,23 +572,23 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
           status: 'skipped',
           message: ''
         });
-        finalPrompt = memoryContext + promptWithSystem;
+        finalPrompt = memoryContext + assistantContext + promptWithSystem;
       }
     } catch (ragError: unknown) {
-      // Non-blocking error - continue with memories only
+      // Non-blocking error - continue with memories + assistant only
       const errorMessage = ragError instanceof Error ? ragError.message : String(ragError);
       console.error('[RAG/Spotlight] Error (continuing):', errorMessage);
       spotlightWindow?.webContents.send('spotlight-rag', {
         status: 'error',
         message: 'RAG unavailable'
       });
-      finalPrompt = memoryContext + promptWithSystem;
+      finalPrompt = memoryContext + assistantContext + promptWithSystem;
     }
-  } else if (memoryContext) {
-    // RAG disabled but we have memories - still inject them
-    finalPrompt = memoryContext + promptWithSystem;
+  } else if (memoryContext || assistantContext) {
+    // RAG disabled but we have memories/assistant - still inject them
+    finalPrompt = memoryContext + assistantContext + promptWithSystem;
   }
-  // === End RAG Processing ===
+  // === End RAG + Assistant Processing ===
 
   // Use finalPrompt (includes RAG context + system instruction) for the API call
   await streamCompletion(orgId, conversationId, finalPrompt, parentMessageUuid, (chunk) => {
@@ -1138,6 +1196,59 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
   }
   // === End Memory + RAG Processing ===
 
+  // === Personal Assistant Processing (Google Services) ===
+  // Fetch calendar, email, tasks context if needed
+  if (assistantSettings.enabled && isAssistantReady()) {
+    try {
+      // Notify UI: Assistant is analyzing
+      mainWindow?.webContents.send('assistant-status', {
+        conversationId,
+        status: 'analyzing',
+        message: 'Checking personal data...'
+      });
+
+      const assistantResult = await processAssistantQuery(
+        message,  // Original message for assistant decision
+        ragSettings.model  // Use same Ollama model as RAG
+      );
+
+      if (assistantResult.decision.needs_google && assistantResult.contexts.length > 0) {
+        // Notify UI: Found personal data
+        mainWindow?.webContents.send('assistant-status', {
+          conversationId,
+          status: 'complete',
+          message: `Found ${assistantResult.contexts.length} data sources`,
+          detail: {
+            services: assistantResult.decision.services,
+            processingTimeMs: assistantResult.processingTimeMs
+          }
+        });
+
+        // Prepend assistant context to augmented message
+        const assistantContext = formatAssistantContext(assistantResult.contexts);
+        augmentedMessage = assistantContext + augmentedMessage;
+        console.log(`[Assistant] Injected context from ${assistantResult.decision.services.join(', ')} (${assistantResult.processingTimeMs}ms)`);
+      } else {
+        mainWindow?.webContents.send('assistant-status', {
+          conversationId,
+          status: 'skipped',
+          message: assistantResult.decision.reasoning || 'No personal data needed'
+        });
+        console.log(`[Assistant] Skipped: ${assistantResult.decision.reasoning}`);
+      }
+    } catch (assistantError: unknown) {
+      // Assistant errors are non-blocking
+      const errorMessage = assistantError instanceof Error ? assistantError.message : String(assistantError);
+      console.error('[Assistant] Processing error (continuing without assistant):', errorMessage);
+      mainWindow?.webContents.send('assistant-status', {
+        conversationId,
+        status: 'error',
+        message: 'Assistant unavailable'
+      });
+    }
+  }
+  // === End Personal Assistant Processing ===
+
   await streamCompletion(orgId, conversationId, augmentedMessage, parentMessageUuid, (chunk) => {
     processSSEChunk(chunk, state, callbacks);
   }, { attachments: [], files: fileIds });
@@ -1381,6 +1492,82 @@ ipcMain.handle('memory-test-connection', async () => {
 });
 
 // ============================================================================
+// Personal Assistant (Google Services)
+// ============================================================================
+
+// Get assistant settings
+ipcMain.handle('assistant-get-settings', async () => {
+  assistantSettings = getAssistantSettings();
+  return assistantSettings;
+});
+
+// Save assistant settings
+ipcMain.handle('assistant-save-settings', async (_event, settings: Partial<AssistantSettingsStore>) => {
+  assistantSettings = { ...assistantSettings, ...settings };
+  saveAssistantSettings(assistantSettings);
+  return { success: true };
+});
+
+// Add Google account (triggers OAuth flow)
+ipcMain.handle('assistant-add-google-account', async () => {
+  try {
+    const result = await startOAuthFlow();
+    if (result.success) {
+      // Reload settings after successful auth
+      assistantSettings = getAssistantSettings();
+    }
+    return result;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[Assistant] OAuth flow error:', errorMessage);
+    return { success: false, error: errorMessage };
+  }
+});
+
+// Remove Google account
+ipcMain.handle('assistant-remove-google-account', async (_event, email: string) => {
+  try {
+    const removed = removeGoogleAccount(email);
+    if (removed) {
+      assistantSettings = getAssistantSettings();
+    }
+    return { success: removed };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
+  }
+});
+
+// Toggle Google account enabled/disabled
+ipcMain.handle('assistant-toggle-account', async (_event, email: string, enabled: boolean) => {
+  try {
+    const toggled = toggleAccountEnabled(email, enabled);
+    if (toggled) {
+      assistantSettings = getAssistantSettings();
+    }
+    return { success: toggled };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
+  }
+});
+
+// Get token status for all accounts (for UI to show Reconnect button)
+ipcMain.handle('assistant-get-accounts-token-status', async () => {
+  return getAccountsTokenStatus();
+});
+
+// Test Google account connection
+ipcMain.handle('assistant-test-connection', async (_event, email: string) => {
+  try {
+    return await testAccountConnection(email);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
+  }
+});
+
+// ============================================================================
 // Settings Sync (Cloud Storage)
 // ============================================================================
 
@@ -1452,6 +1639,13 @@ ipcMain.handle('settings-sync-pull', async () => {
       }
     }
 
+    // Pull assistant settings (credentials only, NOT account tokens)
+    if (cloudSettings.assistant_settings && Object.keys(cloudSettings.assistant_settings).length > 0) {
+      const merged = { ...DEFAULT_ASSISTANT_SETTINGS, ...cloudSettings.assistant_settings };
+      store.set('assistantSettings', merged);
+      assistantSettings = merged as AssistantSettingsStore;
+    }
+
     console.log('[SettingsSync] Pulled settings from cloud');
     return { success: true };
   } catch (error: unknown) {
@@ -1471,11 +1665,19 @@ ipcMain.handle('settings-sync-push', async () => {
     initSettingsSyncClient(memorySettings.supabaseUrl, memorySettings.supabaseAnonKey);
 
     // Gather all current settings (exclude memorySettings - chicken/egg)
+    // For assistant: only sync credentials, NOT Google account tokens (security)
+    const assistantStore = store.get('assistantSettings');
     const cloudSettings: CloudSettings = {
       settings: store.get('settings') || {},
       knowledge_settings: store.get('knowledgeSettings') || {},
       notion_settings: store.get('notionSettings') || {},
-      rag_settings: store.get('ragSettings') || {}
+      rag_settings: store.get('ragSettings') || {},
+      assistant_settings: assistantStore ? {
+        enabled: assistantStore.enabled,
+        googleClientId: assistantStore.googleClientId,
+        googleClientSecret: assistantStore.googleClientSecret
+        // NOTE: googleAccounts[] excluded - tokens stay local
+      } : undefined
     };
 
     const success = await saveSettingsToCloud(cloudSettings);
@@ -2389,6 +2591,13 @@ app.whenReady().then(() => {
         console.error('[Notion] Auto-sync failed:', err);
       }
     })();
+  }
+
+  // Load Assistant settings at startup
+  const assistantStored = store.get('assistantSettings') as AssistantSettingsStore | undefined;
+  if (assistantStored) {
+    assistantSettings = { ...DEFAULT_ASSISTANT_SETTINGS, ...assistantStored };
+    console.log(`[Assistant] Settings loaded (enabled: ${assistantSettings.enabled}, accounts: ${assistantSettings.googleAccounts?.length || 0})`);
   }
 
   app.on('activate', () => {
