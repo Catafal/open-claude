@@ -114,13 +114,14 @@ export async function searchEmails(
 }
 
 /**
- * Get unread emails only.
+ * Get unread emails from inbox only.
+ * Uses 'in:inbox' filter to exclude sent, archived, and other folders.
  */
 export async function getUnreadEmails(
   account: GoogleAccount,
   maxEmails: number = DEFAULT_MAX_EMAILS
 ): Promise<EmailSummary[]> {
-  return searchEmails(account, 'is:unread', maxEmails);
+  return searchEmails(account, 'is:unread in:inbox', maxEmails);
 }
 
 // =============================================================================
