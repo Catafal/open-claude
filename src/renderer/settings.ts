@@ -567,6 +567,125 @@ assistantAddAccountBtn?.addEventListener('click', async () => {
 });
 
 // ============================================================================
+// Gemini YouTube Agent Settings
+// ============================================================================
+
+// Gemini DOM elements
+const geminiEnabledCheckbox = document.getElementById('gemini-enabled') as HTMLInputElement;
+const geminiOptions = document.getElementById('gemini-options') as HTMLElement;
+const geminiStatusIndicator = document.getElementById('gemini-status-indicator') as HTMLElement;
+const geminiStatusText = document.getElementById('gemini-status-text') as HTMLElement;
+const geminiLoginBtn = document.getElementById('gemini-login-btn') as HTMLButtonElement;
+
+// Gemini settings state
+interface GeminiSettings {
+  enabled: boolean;
+}
+
+let geminiSettings: GeminiSettings | null = null;
+
+/**
+ * Load Gemini settings and check authentication status.
+ */
+async function loadGeminiSettings() {
+  try {
+    geminiSettings = await claude.geminiGetSettings();
+
+    if (geminiSettings && geminiEnabledCheckbox) {
+      geminiEnabledCheckbox.checked = geminiSettings.enabled;
+    }
+
+    // Check authentication status
+    await checkGeminiAuthStatus();
+  } catch (error) {
+    console.error('Failed to load Gemini settings:', error);
+  }
+}
+
+/**
+ * Check if user is authenticated with Gemini and update status indicator.
+ */
+async function checkGeminiAuthStatus() {
+  if (!geminiStatusIndicator || !geminiStatusText) return;
+
+  geminiStatusIndicator.className = 'status-indicator status-checking';
+  geminiStatusText.textContent = 'Checking...';
+
+  try {
+    const isAuthenticated = await claude.geminiIsAuthenticated();
+
+    if (isAuthenticated) {
+      geminiStatusIndicator.className = 'status-indicator status-connected';
+      geminiStatusText.textContent = 'Logged in';
+      updateGeminiLoginButton(true);
+    } else {
+      geminiStatusIndicator.className = 'status-indicator status-disconnected';
+      geminiStatusText.textContent = 'Not logged in';
+      updateGeminiLoginButton(false);
+    }
+  } catch (error) {
+    geminiStatusIndicator.className = 'status-indicator status-disconnected';
+    geminiStatusText.textContent = 'Error checking status';
+  }
+}
+
+/**
+ * Update Gemini login button appearance based on auth state.
+ * Uses safe DOM manipulation instead of innerHTML.
+ */
+function updateGeminiLoginButton(isLoggedIn: boolean) {
+  if (!geminiLoginBtn) return;
+
+  // Clear existing content
+  geminiLoginBtn.textContent = '';
+
+  // Create icon span
+  const iconSpan = document.createElement('span');
+  iconSpan.className = 'btn-icon';
+  iconSpan.textContent = isLoggedIn ? '✓' : '🔑';
+
+  // Add icon and text
+  geminiLoginBtn.appendChild(iconSpan);
+  geminiLoginBtn.appendChild(document.createTextNode(isLoggedIn ? ' Logged in to Gemini' : ' Login to Gemini'));
+
+  // Update button class
+  if (isLoggedIn) {
+    geminiLoginBtn.classList.add('btn-success');
+  } else {
+    geminiLoginBtn.classList.remove('btn-success');
+  }
+}
+
+// Gemini enabled toggle
+geminiEnabledCheckbox?.addEventListener('change', async () => {
+  if (!geminiSettings) return;
+  geminiSettings = await claude.geminiSaveSettings({ enabled: geminiEnabledCheckbox.checked });
+});
+
+// Gemini login button - opens Gemini web login window
+geminiLoginBtn?.addEventListener('click', async () => {
+  geminiLoginBtn.disabled = true;
+  geminiLoginBtn.textContent = '⏳ Opening login...';
+
+  try {
+    const result = await claude.geminiLogin();
+
+    if (result.success) {
+      await checkGeminiAuthStatus();
+    } else {
+      alert(`Login failed: ${result.error || 'Unknown error'}`);
+      await checkGeminiAuthStatus();
+    }
+  } catch (error) {
+    console.error('Gemini login failed:', error);
+    alert('Failed to open Gemini login. Check console for details.');
+    await checkGeminiAuthStatus();
+  } finally {
+    geminiLoginBtn.disabled = false;
+  }
+});
+
+// ============================================================================
 // Settings Sync (Cloud Storage)
 // ============================================================================
 
@@ -686,4 +805,5 @@ window.addEventListener('load', () => {
   loadSettings();
   loadMemorySettings();
   loadAssistantSettings();
+  loadGeminiSettings();
 });

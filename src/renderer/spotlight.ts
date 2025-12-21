@@ -90,6 +90,41 @@ function showNewChatButton(show: boolean) {
   }
 }
 
+/**
+ * Add a message to the spotlight UI.
+ * Uses escapeHtml for user text (sanitized) and parseMarkdown for assistant.
+ */
+function addMessage(role: 'user' | 'assistant', text: string) {
+  if (!messagesArea) return;
+
+  // Ensure messages area is visible
+  inputRow?.classList.add('no-border');
+  messagesArea.classList.add('visible');
+
+  const msgEl = document.createElement('div');
+
+  if (role === 'user') {
+    msgEl.className = 'message';
+    // User text is sanitized via escapeHtml (same pattern as line 102)
+    const userDiv = document.createElement('div');
+    userDiv.className = 'user-message';
+    userDiv.textContent = text;
+    msgEl.appendChild(userDiv);
+  } else {
+    msgEl.className = 'message ai-message';
+    const responseEl = document.createElement('div');
+    responseEl.className = 'ai-response';
+    // Assistant uses parseMarkdown (same pattern as line 107, 441)
+    responseEl.innerHTML = parseMarkdown(text);
+    msgEl.appendChild(responseEl);
+  }
+
+  messagesArea.appendChild(msgEl);
+  hasHistory = true;
+  showNewChatButton(true);
+  updateWindowSize();
+}
+
 // Render existing messages from history
 function renderHistoryMessages(messages: Message[]) {
   if (!messagesArea) return;
@@ -319,12 +354,20 @@ async function speakText(text: string) {
  * Haiku/Opus mode: sends to Claude with model. TTS mode: converts to speech.
  */
 async function handleSubmit() {
+  console.log('[Spotlight] handleSubmit called, mode:', currentMode);
   const text = input.value.trim();
-  if (!text) return;
+  if (!text) {
+    console.log('[Spotlight] No text, returning');
+    return;
+  }
+
+  console.log('[Spotlight] Processing text:', text.substring(0, 50));
 
   if (currentMode === 'tts') {
+    console.log('[Spotlight] TTS mode');
     await speakText(text);
   } else {
+    console.log('[Spotlight] Chat mode');
     await sendMessage();
   }
 }
@@ -335,7 +378,8 @@ async function handleSubmit() {
 
 /**
  * Toggle between Haiku, Opus, and TTS modes.
- * Haiku/Opus = sends to Claude with respective model, TTS = text-to-speech only (no AI).
+ * Haiku/Opus = sends to Claude with respective model
+ * TTS = text-to-speech only (no AI)
  */
 modeToggle?.addEventListener('click', () => {
   // Cycle: haiku → opus → tts → haiku

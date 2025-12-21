@@ -722,6 +722,10 @@ function initSettingsUI() {
   $('settings-automation-account')?.addEventListener('change', saveAutomationSettings);
   $('automation-test-now')?.addEventListener('click', triggerAutomationNow);
 
+  // Gemini: Enable toggle and login button
+  $('settings-gemini-enabled')?.addEventListener('change', saveGeminiSettings);
+  $('gemini-login-btn')?.addEventListener('click', loginToGemini);
+
   // Cloud Sync: Pull and Push buttons
   $('settings-sync-pull')?.addEventListener('click', pullSettingsFromCloud);
   $('settings-sync-push')?.addEventListener('click', pushSettingsToCloud);
@@ -762,6 +766,7 @@ function showSettings() {
   loadMemorySettings();       // Memory
   loadAssistantSettings();    // Personal Assistant (Google services)
   loadAutomationSettings();   // Automations (morning email)
+  loadGeminiSettings();       // Gemini
 }
 
 // Knowledge UI functions
@@ -1361,6 +1366,91 @@ async function triggerAutomationNow() {
     alert('Failed to trigger morning email');
     button.textContent = 'Send Now';
     button.disabled = false;
+  }
+}
+
+// ============================================================================
+// Gemini Functions (future use)
+// ============================================================================
+
+/**
+ * Load Gemini settings and check authentication status.
+ */
+async function loadGeminiSettings() {
+  const enabled = $('settings-gemini-enabled') as HTMLInputElement;
+  const status = $('gemini-status') as HTMLElement;
+  const loginBtn = $('gemini-login-btn') as HTMLButtonElement;
+  if (!enabled) return;
+
+  // Load settings
+  const settings = await window.claude.geminiGetSettings?.();
+  if (settings) {
+    enabled.checked = settings.enabled === true;
+  }
+
+  // Check authentication status
+  if (status) status.textContent = 'Checking...';
+
+  try {
+    const isAuthenticated = await window.claude.geminiIsAuthenticated?.();
+
+    if (isAuthenticated) {
+      if (status) status.textContent = 'Logged in';
+      if (loginBtn) {
+        loginBtn.textContent = '✓ Logged in';
+        loginBtn.classList.add('btn-success');
+      }
+    } else {
+      if (status) status.textContent = 'Not logged in';
+      if (loginBtn) {
+        loginBtn.textContent = 'Login to Gemini';
+        loginBtn.classList.remove('btn-success');
+      }
+    }
+  } catch (err) {
+    if (status) status.textContent = 'Error checking status';
+  }
+}
+
+/**
+ * Save Gemini settings when user changes inputs.
+ */
+async function saveGeminiSettings() {
+  const enabled = $('settings-gemini-enabled') as HTMLInputElement;
+  if (!enabled) return;
+
+  await window.claude.geminiSaveSettings?.({ enabled: enabled.checked });
+}
+
+/**
+ * Open Gemini login window for authentication.
+ */
+async function loginToGemini() {
+  const loginBtn = $('gemini-login-btn') as HTMLButtonElement;
+  const status = $('gemini-status') as HTMLElement;
+  if (!loginBtn) return;
+
+  loginBtn.disabled = true;
+  loginBtn.textContent = 'Opening...';
+
+  try {
+    const result = await window.claude.geminiLogin?.();
+
+    if (result?.success) {
+      if (status) status.textContent = 'Logged in';
+      loginBtn.textContent = '✓ Logged in';
+      loginBtn.classList.add('btn-success');
+    } else {
+      if (status) status.textContent = result?.error || 'Login failed';
+      loginBtn.textContent = 'Login to Gemini';
+      loginBtn.classList.remove('btn-success');
+    }
+  } catch (err) {
+    console.error('Gemini login failed:', err);
+    if (status) status.textContent = 'Login failed';
+    loginBtn.textContent = 'Login to Gemini';
+  } finally {
+    loginBtn.disabled = false;
   }
 }
 

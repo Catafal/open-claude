@@ -304,6 +304,40 @@
         </div>
       </div>
 
+      <!-- Gemini Integration Section (future use) -->
+      <div class="settings-section">
+        <h2>Gemini Integration</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Enable Gemini</label>
+            <span class="setting-description">Connect Gemini AI for additional features (coming soon)</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="gemini-enabled">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div id="gemini-options">
+          <!-- Login Status -->
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Gemini Account</label>
+              <span class="setting-description">Login with your Google account to use Gemini</span>
+            </div>
+            <div class="server-status">
+              <span id="gemini-status-indicator" class="status-indicator status-unknown"></span>
+              <span id="gemini-status-text">Not logged in</span>
+            </div>
+          </div>
+
+          <button id="gemini-login-btn" class="btn-primary">
+            <span class="btn-icon">🔑</span> Login to Gemini
+          </button>
+        </div>
+      </div>
+
       <!-- Cloud Sync Section - Separate from Memory -->
       <div class="settings-section">
         <h2>Cloud Sync</h2>

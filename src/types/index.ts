@@ -78,6 +78,11 @@ export interface AutomationSettingsStore {
   resendToEmail?: string; // Email to send to (can be any email)
 }
 
+// Gemini settings (for YouTube Knowledge Agent)
+export interface GeminiSettingsStore {
+  enabled: boolean;
+}
+
 // Memory types for extraction and storage
 export type MemoryCategory = 'factual' | 'preference' | 'relationship' | 'temporal';
 
@@ -106,6 +111,7 @@ export interface StoreSchema {
   memorySettings?: MemorySettingsStore;
   assistantSettings?: AssistantSettingsStore;  // Google services integration
   automationSettings?: AutomationSettingsStore;  // Morning email and future automations
+  geminiSettings?: GeminiSettingsStore;  // YouTube Knowledge Agent
 }
 
 // File attachment payloads

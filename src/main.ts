@@ -102,6 +102,12 @@ import {
   type AutomationSettings
 } from './automation';
 import type { AutomationSettingsStore } from './types';
+import {
+  isGeminiAuthenticated,
+  clearTokenCache,
+  DEFAULT_GEMINI_SETTINGS,
+  type GeminiSettings
+} from './gemini';
 
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
@@ -136,6 +142,9 @@ let assistantSettings: AssistantSettingsStore = { ...DEFAULT_ASSISTANT_SETTINGS 
 
 // Automation settings (morning email)
 let automationSettings: AutomationSettings = { ...DEFAULT_AUTOMATION_SETTINGS };
+
+// Gemini settings (YouTube Knowledge Agent)
+let geminiSettings: GeminiSettings = { ...DEFAULT_GEMINI_SETTINGS };
 
 // Default settings
 const DEFAULT_SETTINGS: SettingsSchema = {
@@ -1585,6 +1594,79 @@ ipcMain.handle('assistant-test-connection', async (_event, email: string) => {
 });
 
 // ============================================================================
+// Gemini YouTube Knowledge Agent
+// ============================================================================
+
+// Check Gemini authentication status
+ipcMain.handle('gemini:is-authenticated', async () => {
+  return isGeminiAuthenticated();
+});
+
+// Open Gemini login window
+ipcMain.handle('gemini:login', async () => {
+  // Open Gemini in a browser window for login
+  // User logs in, cookies are stored in Electron session
+  const loginWindow = new BrowserWindow({
+    width: 1000,
+    height: 700,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    },
+    title: 'Sign in to Gemini'
+  });
+
+  await loginWindow.loadURL('https://gemini.google.com');
+
+  return new Promise<{ success: boolean; error?: string }>((resolve) => {
+    // Poll for authentication cookies
+    const checkAuth = setInterval(async () => {
+      const isAuth = await isGeminiAuthenticated();
+      if (isAuth) {
+        clearInterval(checkAuth);
+        loginWindow.close();
+        console.log('[Gemini] Login successful');
+        resolve({ success: true });
+      }
+    }, 1000);
+
+    // Handle window close without auth
+    loginWindow.on('closed', () => {
+      clearInterval(checkAuth);
+      resolve({ success: false, error: 'Login window closed' });
+    });
+
+    // Timeout after 5 minutes
+    setTimeout(() => {
+      clearInterval(checkAuth);
+      if (!loginWindow.isDestroyed()) {
+        loginWindow.close();
+      }
+      resolve({ success: false, error: 'Login timed out' });
+    }, 5 * 60 * 1000);
+  });
+});
+
+// Get Gemini settings
+ipcMain.handle('gemini:get-settings', async () => {
+  return geminiSettings;
+});
+
+// Save Gemini settings
+ipcMain.handle('gemini:save-settings', async (_event, settings: Partial<GeminiSettings>) => {
+  geminiSettings = { ...geminiSettings, ...settings };
+  store.set('geminiSettings', geminiSettings);
+  console.log(`[Gemini] Settings saved (enabled: ${geminiSettings.enabled})`);
+  return { success: true };
+});
+
+// Clear Gemini token cache (for troubleshooting)
+ipcMain.handle('gemini:clear-cache', async () => {
+  clearTokenCache();
+  return { success: true };
+});
+
+// ============================================================================
 // Automation Settings (Morning Email)
 // ============================================================================
 
@@ -1731,7 +1813,19 @@ ipcMain.handle('settings-sync-pull', async () => {
                               automationSettings.resendFromEmail &&
                               automationSettings.resendToEmail;
       if (automationSettings.morningEmailEnabled && hasResendConfig) {
-        scheduleMorningEmail(automationSettings, memorySettings, ragSettings, knowledgeSettings, assistantSettings);
+        const getAccountByEmail = (email: string) =>
+          assistantSettings.googleAccounts.find(a => a.email === email && a.enabled);
+        initMorningEmailScheduler(
+          automationSettings,
+          getAccountByEmail,
+          ragSettings,
+          knowledgeSettings.collectionName,
+          {
+            url: memorySettings.supabaseUrl,
+            anonKey: memorySettings.supabaseAnonKey,
+            deviceId: store.get('deviceId') || crypto.randomUUID()
+          }
+        );
       }
     }
 

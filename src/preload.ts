@@ -223,6 +223,14 @@ contextBridge.exposeInMainWorld('claude', {
   automationGetStatus: () => ipcRenderer.invoke('automation-get-status'),
   automationTriggerNow: () => ipcRenderer.invoke('automation-trigger-now'),
 
+  // Gemini (future use)
+  geminiIsAuthenticated: () => ipcRenderer.invoke('gemini:is-authenticated'),
+  geminiLogin: () => ipcRenderer.invoke('gemini:login'),
+  geminiGetSettings: () => ipcRenderer.invoke('gemini:get-settings'),
+  geminiSaveSettings: (settings: { enabled?: boolean }) =>
+    ipcRenderer.invoke('gemini:save-settings', settings),
+  geminiClearCache: () => ipcRenderer.invoke('gemini:clear-cache'),
+
   // Settings Sync (Cloud Storage) - LOCAL wins, cloud is backup
   settingsSyncHasCloud: () => ipcRenderer.invoke('settings-sync-has-cloud'),
   settingsSyncPull: () => ipcRenderer.invoke('settings-sync-pull'),
