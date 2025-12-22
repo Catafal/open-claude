@@ -1,6 +1,47 @@
-import { app, BrowserWindow, ipcMain, session, globalShortcut, screen, Tray, Menu, nativeImage, dialog, shell } from 'electron';
-import path from 'path';
+/**
+ * Open Claude - Main Process Entry Point
+ *
+ * This is the Electron main process that handles:
+ * - App lifecycle and initialization
+ * - IPC handlers for all features
+ * - Integration with external services
+ *
+ * FILE ORGANIZATION:
+ * 1. Imports (external, internal modules)
+ * 2. Settings state and configuration
+ * 3. Global shortcuts registration
+ * 4. IPC Handlers:
+ *    - Spotlight (quick AI chat)
+ *    - Auth (login, logout)
+ *    - Conversations (CRUD)
+ *    - Messages (send, stream)
+ *    - Knowledge (Qdrant, Firecrawl)
+ *    - Notion (sync, import)
+ *    - RAG (Ollama integration)
+ *    - Memory (Supabase)
+ *    - Assistant (Google services)
+ *    - Gemini (future features)
+ *    - Automation (morning email)
+ *    - Settings sync (cloud backup)
+ *    - Prompts (prompt base)
+ * 5. App lifecycle (ready, activate, quit)
+ */
+
+import { app, BrowserWindow, ipcMain, session, globalShortcut, dialog, shell } from 'electron';
 import crypto from 'crypto';
+import {
+  createMainWindow,
+  getMainWindow,
+  showSettingsView,
+  showKnowledgeView,
+  createSpotlightWindow,
+  getSpotlightWindow,
+  resizeSpotlightWindow,
+  createPromptSelectorWindow,
+  getPromptSelectorWindow,
+  closePromptSelectorWindow,
+  createTray,
+} from './windows';
 import { isAuthenticated, getOrgId, makeRequest, streamCompletion, stopResponse, generateTitle, store, BASE_URL, prepareAttachmentPayload } from './api/client';
 import { createStreamState, processSSEChunk, type StreamCallbacks } from './streaming/parser';
 import type { SettingsSchema, AttachmentPayload, UploadFilePayload, KnowledgeSettingsStore, NotionSettingsStore, TrackedNotionPage } from './types';
@@ -109,11 +150,6 @@ import {
   type GeminiSettings
 } from './gemini';
 
-let mainWindow: BrowserWindow | null = null;
-let spotlightWindow: BrowserWindow | null = null;
-let promptSelectorWindow: BrowserWindow | null = null;
-let tray: Tray | null = null;
-
 // Knowledge settings (loaded from store)
 let knowledgeSettings: KnowledgeSettings = { ...DEFAULT_KNOWLEDGE_SETTINGS };
 
@@ -197,216 +233,13 @@ function registerSpotlightShortcut() {
   }
 }
 
-// Create spotlight search window
-function createSpotlightWindow() {
-  if (spotlightWindow && !spotlightWindow.isDestroyed()) {
-    spotlightWindow.focus();
-    return;
-  }
-
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth } = primaryDisplay.workAreaSize;
-
-  spotlightWindow = new BrowserWindow({
-    width: 600,
-    height: 56,
-    x: Math.round((screenWidth - 600) / 2),
-    y: 180,
-    frame: false,
-    transparent: true,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
-    backgroundColor: '#00000000',
-    resizable: false,
-    movable: true,
-    minimizable: false,
-    maximizable: false,
-    closable: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-
-  spotlightWindow.loadFile(path.join(__dirname, '../static/spotlight.html'));
-
-  // Close on blur (clicking outside)
-  spotlightWindow.on('blur', () => {
-    if (spotlightWindow && !spotlightWindow.isDestroyed()) {
-      spotlightWindow.close();
-    }
-  });
-
-  spotlightWindow.on('closed', () => {
-    spotlightWindow = null;
-  });
-}
-
-// Create prompt selector floating window (Cmd+Shift+X)
-function createPromptSelectorWindow() {
-  if (promptSelectorWindow && !promptSelectorWindow.isDestroyed()) {
-    promptSelectorWindow.focus();
-    return;
-  }
-
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth } = primaryDisplay.workAreaSize;
-
-  promptSelectorWindow = new BrowserWindow({
-    width: 500,
-    height: 520,  // Taller for improve mode results
-    x: Math.round((screenWidth - 500) / 2),
-    y: 150,
-    frame: false,
-    transparent: true,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
-    backgroundColor: '#00000000',
-    resizable: true,  // Allow resize for large content
-    minWidth: 400,
-    minHeight: 350,
-    maxHeight: 700,
-    movable: true,
-    minimizable: false,
-    maximizable: false,
-    closable: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-
-  promptSelectorWindow.loadFile(path.join(__dirname, '../static/prompt-selector.html'));
-
-  // Close on blur (clicking outside)
-  promptSelectorWindow.on('blur', () => {
-    if (promptSelectorWindow && !promptSelectorWindow.isDestroyed()) {
-      promptSelectorWindow.close();
-    }
-  });
-
-  promptSelectorWindow.on('closed', () => {
-    promptSelectorWindow = null;
-  });
-}
-
-function createMainWindow() {
-  mainWindow = new BrowserWindow({
-    width: 900,
-    height: 700,
-    transparent: true,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
-    backgroundColor: '#00000000',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 16 },
-  });
-
-  mainWindow.loadFile(path.join(__dirname, '../static/index.html'));
-}
-
-// Show settings view in main window (inline navigation)
-function showSettingsView() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
-    mainWindow.webContents.send('show-settings-view');
-  }
-}
-
-/**
- * Creates the menu bar tray icon with context menu.
- * macOS only: App runs in menu bar without dock icon.
- */
-function createTray() {
-  try {
-    // Load pre-sized tray icon (22x22) for menu bar
-    const iconPath = path.join(__dirname, '../build/trayIcon.png');
-    const trayIcon = nativeImage.createFromPath(iconPath);
-    if (trayIcon.isEmpty()) return;
-
-    // Template image auto-adapts to light/dark menu bar
-    trayIcon.setTemplateImage(true);
-
-    tray = new Tray(trayIcon);
-    tray.setToolTip('Open Claude');
-
-    // Build context menu for tray
-    const contextMenu = Menu.buildFromTemplate([
-      {
-        label: 'Show Window',
-        click: () => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.show();
-            mainWindow.focus();
-          } else {
-            createMainWindow();
-          }
-        }
-      },
-      {
-        label: 'Spotlight',
-        accelerator: getSettings().spotlightKeybind,
-        click: () => createSpotlightWindow()
-      },
-      {
-        label: 'Settings',
-        click: () => showSettingsView()
-      },
-      {
-        label: 'Knowledge',
-        click: () => {
-          if (mainWindow) {
-            mainWindow.show();
-            mainWindow.focus();
-            mainWindow.webContents.send('show-knowledge-view');
-          }
-        }
-      },
-      { type: 'separator' },
-      {
-        label: 'Quit',
-        accelerator: 'CommandOrControl+Q',
-        click: () => app.quit()
-      }
-    ]);
-
-    tray.setContextMenu(contextMenu);
-
-    // Click on tray icon shows main window (macOS standard behavior)
-    tray.on('click', () => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.show();
-        mainWindow.focus();
-      } else {
-        createMainWindow();
-      }
-    });
-  } catch (error) {
-    console.error('[Tray] Failed to create tray:', error);
-  }
-}
-
-// IPC handlers
+// ============================================================================
+// IPC HANDLERS
+// ============================================================================
 
 // Spotlight window resize
 ipcMain.handle('spotlight-resize', async (_event, height: number) => {
-  if (spotlightWindow && !spotlightWindow.isDestroyed()) {
-    const maxHeight = 700;
-    const newHeight = Math.min(height, maxHeight);
-    spotlightWindow.setSize(600, newHeight);
-  }
+  resizeSpotlightWindow(height);
 });
 
 // Spotlight conversation state
@@ -463,30 +296,30 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
 
   const callbacks: StreamCallbacks = {
     onTextDelta: (text, fullText) => {
-      spotlightWindow?.webContents.send('spotlight-stream', { text, fullText });
+      getSpotlightWindow()?.webContents.send('spotlight-stream', { text, fullText });
     },
     onThinkingStart: () => {
-      spotlightWindow?.webContents.send('spotlight-thinking', { isThinking: true });
+      getSpotlightWindow()?.webContents.send('spotlight-thinking', { isThinking: true });
     },
     onThinkingDelta: (thinking) => {
-      spotlightWindow?.webContents.send('spotlight-thinking-stream', { thinking });
+      getSpotlightWindow()?.webContents.send('spotlight-thinking-stream', { thinking });
     },
     onThinkingStop: (thinkingText) => {
-      spotlightWindow?.webContents.send('spotlight-thinking', { isThinking: false, thinkingText });
+      getSpotlightWindow()?.webContents.send('spotlight-thinking', { isThinking: false, thinkingText });
     },
     onToolStart: (toolName, msg) => {
-      spotlightWindow?.webContents.send('spotlight-tool', { toolName, isRunning: true, message: msg });
+      getSpotlightWindow()?.webContents.send('spotlight-tool', { toolName, isRunning: true, message: msg });
     },
     onToolStop: (toolName, input) => {
-      spotlightWindow?.webContents.send('spotlight-tool', { toolName, isRunning: false, input });
+      getSpotlightWindow()?.webContents.send('spotlight-tool', { toolName, isRunning: false, input });
     },
     onToolResult: (toolName, result, isError) => {
-      spotlightWindow?.webContents.send('spotlight-tool-result', { toolName, isError, result });
+      getSpotlightWindow()?.webContents.send('spotlight-tool-result', { toolName, isError, result });
     },
     onComplete: (fullText, _steps, messageUuid) => {
       // Store assistant response
       spotlightMessages.push({ role: 'assistant', text: fullText });
-      spotlightWindow?.webContents.send('spotlight-complete', { fullText, messageUuid });
+      getSpotlightWindow()?.webContents.send('spotlight-complete', { fullText, messageUuid });
 
       // Add to memory buffer if enabled (schedule extraction after 10 min)
       if (memorySettings.enabled) {
@@ -516,7 +349,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
   // Personal Assistant: Check if query needs Google data (calendar, email, tasks)
   if (assistantSettings.enabled && isAssistantReady()) {
     try {
-      spotlightWindow?.webContents.send('spotlight-assistant', {
+      getSpotlightWindow()?.webContents.send('spotlight-assistant', {
         status: 'analyzing',
         message: 'Checking personal data...'
       });
@@ -527,7 +360,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
       );
 
       if (assistantResult.decision.needs_google && assistantResult.contexts.length > 0) {
-        spotlightWindow?.webContents.send('spotlight-assistant', {
+        getSpotlightWindow()?.webContents.send('spotlight-assistant', {
           status: 'complete',
           message: `Found ${assistantResult.contexts.length} data sources`
         });
@@ -535,7 +368,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
         assistantContext = formatAssistantContext(assistantResult.contexts);
         console.log(`[Assistant/Spotlight] Injected context from services: ${assistantResult.decision.services?.join(', ')}`);
       } else {
-        spotlightWindow?.webContents.send('spotlight-assistant', {
+        getSpotlightWindow()?.webContents.send('spotlight-assistant', {
           status: 'skipped',
           message: ''
         });
@@ -543,7 +376,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
     } catch (assistantError: unknown) {
       const errorMessage = assistantError instanceof Error ? assistantError.message : String(assistantError);
       console.error('[Assistant/Spotlight] Error (continuing):', errorMessage);
-      spotlightWindow?.webContents.send('spotlight-assistant', {
+      getSpotlightWindow()?.webContents.send('spotlight-assistant', {
         status: 'error',
         message: 'Assistant unavailable'
       });
@@ -553,7 +386,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
   if (ragSettings.enabled && knowledgeSettings.collectionName) {
     try {
       // Notify Spotlight UI: Agent is analyzing
-      spotlightWindow?.webContents.send('spotlight-rag', {
+      getSpotlightWindow()?.webContents.send('spotlight-rag', {
         status: 'agent_thinking',
         message: 'Searching knowledge...'
       });
@@ -572,7 +405,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
 
       if (ragResult.decision.needs_retrieval && ragResult.contexts.length > 0) {
         // Notify Spotlight UI: Found context
-        spotlightWindow?.webContents.send('spotlight-rag', {
+        getSpotlightWindow()?.webContents.send('spotlight-rag', {
           status: 'complete',
           message: `Found ${ragResult.contexts.length} sources`
         });
@@ -583,7 +416,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
         console.log(`[RAG/Spotlight] Cleaned query: "${cleanedQuery}"`);
       } else if (ragResult.decision.needs_retrieval) {
         // Retrieval was needed but no results found - still use cleaned query
-        spotlightWindow?.webContents.send('spotlight-rag', {
+        getSpotlightWindow()?.webContents.send('spotlight-rag', {
           status: 'skipped',
           message: 'No matching content'
         });
@@ -591,7 +424,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
         console.log(`[RAG/Spotlight] No results, using cleaned query: "${cleanedQuery}"`);
       } else {
         // Notify Spotlight UI: No retrieval needed, but still include memories
-        spotlightWindow?.webContents.send('spotlight-rag', {
+        getSpotlightWindow()?.webContents.send('spotlight-rag', {
           status: 'skipped',
           message: ''
         });
@@ -601,7 +434,7 @@ ipcMain.handle('spotlight-send', async (_event, message: string, model?: string)
       // Non-blocking error - continue with memories + assistant only
       const errorMessage = ragError instanceof Error ? ragError.message : String(ragError);
       console.error('[RAG/Spotlight] Error (continuing):', errorMessage);
-      spotlightWindow?.webContents.send('spotlight-rag', {
+      getSpotlightWindow()?.webContents.send('spotlight-rag', {
         status: 'error',
         message: 'RAG unavailable'
       });
@@ -713,11 +546,11 @@ ipcMain.handle('prompts-improve-with-claude', async (_event, promptContent: stri
     onTextDelta: (_text, fullText, _blockIndex) => {
       improvedText = fullText;  // Use fullText from parser (already accumulated)
       // Stream to prompt selector window
-      promptSelectorWindow?.webContents.send('improve-stream', { text: fullText });
+      getPromptSelectorWindow()?.webContents.send('improve-stream', { text: fullText });
     },
     onComplete: (fullText, _steps, messageUuid) => {
       improverParentMessageUuid = messageUuid;
-      promptSelectorWindow?.webContents.send('improve-complete', { improved: fullText });
+      getPromptSelectorWindow()?.webContents.send('improve-complete', { improved: fullText });
     }
   };
 
@@ -731,7 +564,7 @@ ipcMain.handle('prompts-improve-with-claude', async (_event, promptContent: stri
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    promptSelectorWindow?.webContents.send('improve-error', { error: errorMessage });
+    getPromptSelectorWindow()?.webContents.send('improve-error', { error: errorMessage });
     throw error;
   }
 
@@ -1058,14 +891,14 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
 
   const callbacks: StreamCallbacks = {
     onTextDelta: (text, fullText, blockIndex) => {
-      mainWindow?.webContents.send('message-stream', { conversationId, blockIndex, text, fullText });
+      getMainWindow()?.webContents.send('message-stream', { conversationId, blockIndex, text, fullText });
     },
     onThinkingStart: (blockIndex) => {
-      mainWindow?.webContents.send('message-thinking', { conversationId, blockIndex, isThinking: true });
+      getMainWindow()?.webContents.send('message-thinking', { conversationId, blockIndex, isThinking: true });
     },
     onThinkingDelta: (thinking, blockIndex) => {
       const block = state.contentBlocks.get(blockIndex);
-      mainWindow?.webContents.send('message-thinking-stream', {
+      getMainWindow()?.webContents.send('message-thinking-stream', {
         conversationId,
         blockIndex,
         thinking,
@@ -1073,7 +906,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
       });
     },
     onThinkingStop: (thinkingText, summaries, blockIndex) => {
-      mainWindow?.webContents.send('message-thinking', {
+      getMainWindow()?.webContents.send('message-thinking', {
         conversationId,
         blockIndex,
         isThinking: false,
@@ -1082,7 +915,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
       });
     },
     onToolStart: (toolName, toolMessage, blockIndex) => {
-      mainWindow?.webContents.send('message-tool-use', {
+      getMainWindow()?.webContents.send('message-tool-use', {
         conversationId,
         blockIndex,
         toolName,
@@ -1092,7 +925,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
     },
     onToolStop: (toolName, input, blockIndex) => {
       const block = state.contentBlocks.get(blockIndex);
-      mainWindow?.webContents.send('message-tool-use', {
+      getMainWindow()?.webContents.send('message-tool-use', {
         conversationId,
         blockIndex,
         toolName,
@@ -1102,7 +935,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
       });
     },
     onToolResult: (toolName, result, isError, blockIndex) => {
-      mainWindow?.webContents.send('message-tool-result', {
+      getMainWindow()?.webContents.send('message-tool-result', {
         conversationId,
         blockIndex,
         toolName,
@@ -1111,16 +944,16 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
       });
     },
     onCitation: (citation, blockIndex) => {
-      mainWindow?.webContents.send('message-citation', { conversationId, blockIndex, citation });
+      getMainWindow()?.webContents.send('message-citation', { conversationId, blockIndex, citation });
     },
     onToolApproval: (toolName, approvalKey, input) => {
-      mainWindow?.webContents.send('message-tool-approval', { conversationId, toolName, approvalKey, input });
+      getMainWindow()?.webContents.send('message-tool-approval', { conversationId, toolName, approvalKey, input });
     },
     onCompaction: (status, compactionMessage) => {
-      mainWindow?.webContents.send('message-compaction', { conversationId, status, message: compactionMessage });
+      getMainWindow()?.webContents.send('message-compaction', { conversationId, status, message: compactionMessage });
     },
     onComplete: (fullText, steps, messageUuid) => {
-      mainWindow?.webContents.send('message-complete', { conversationId, fullText, steps, messageUuid });
+      getMainWindow()?.webContents.send('message-complete', { conversationId, fullText, steps, messageUuid });
 
       // Add to memory buffer if enabled (schedule extraction after 10 min)
       if (memorySettings.enabled) {
@@ -1154,7 +987,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
   if (ragSettings.enabled && knowledgeSettings.collectionName) {
     try {
       // Notify UI: Agent is analyzing the query
-      mainWindow?.webContents.send('rag-status', {
+      getMainWindow()?.webContents.send('rag-status', {
         conversationId,
         status: 'agent_thinking',
         message: 'Analyzing query...'
@@ -1171,7 +1004,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
 
       if (ragResult.decision.needs_retrieval && ragResult.contexts.length > 0) {
         // Notify UI: Found relevant context
-        mainWindow?.webContents.send('rag-status', {
+        getMainWindow()?.webContents.send('rag-status', {
           conversationId,
           status: 'complete',
           message: `Found ${ragResult.contexts.length} relevant sources`,
@@ -1188,7 +1021,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
         console.log(`[RAG] Cleaned query: "${cleanedQuery}"`);
       } else if (ragResult.decision.needs_retrieval) {
         // Retrieval was needed but no results found - still use cleaned query
-        mainWindow?.webContents.send('rag-status', {
+        getMainWindow()?.webContents.send('rag-status', {
           conversationId,
           status: 'skipped',
           message: 'No matching content found'
@@ -1197,7 +1030,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
         console.log(`[RAG] No results, using cleaned query: "${cleanedQuery}"`);
       } else {
         // Notify UI: No retrieval needed, but still include memories
-        mainWindow?.webContents.send('rag-status', {
+        getMainWindow()?.webContents.send('rag-status', {
           conversationId,
           status: 'skipped',
           message: ragResult.decision.reasoning || 'No retrieval needed'
@@ -1209,7 +1042,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
       // RAG errors are non-blocking - log and continue with memories only
       const errorMessage = ragError instanceof Error ? ragError.message : String(ragError);
       console.error('[RAG] Processing error (continuing without RAG):', errorMessage);
-      mainWindow?.webContents.send('rag-status', {
+      getMainWindow()?.webContents.send('rag-status', {
         conversationId,
         status: 'error',
         message: 'RAG unavailable'
@@ -1227,7 +1060,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
   if (assistantSettings.enabled && isAssistantReady()) {
     try {
       // Notify UI: Assistant is analyzing
-      mainWindow?.webContents.send('assistant-status', {
+      getMainWindow()?.webContents.send('assistant-status', {
         conversationId,
         status: 'analyzing',
         message: 'Checking personal data...'
@@ -1240,7 +1073,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
 
       if (assistantResult.decision.needs_google && assistantResult.contexts.length > 0) {
         // Notify UI: Found personal data
-        mainWindow?.webContents.send('assistant-status', {
+        getMainWindow()?.webContents.send('assistant-status', {
           conversationId,
           status: 'complete',
           message: `Found ${assistantResult.contexts.length} data sources`,
@@ -1255,7 +1088,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
         augmentedMessage = assistantContext + augmentedMessage;
         console.log(`[Assistant] Injected context from ${assistantResult.decision.services.join(', ')} (${assistantResult.processingTimeMs}ms)`);
       } else {
-        mainWindow?.webContents.send('assistant-status', {
+        getMainWindow()?.webContents.send('assistant-status', {
           conversationId,
           status: 'skipped',
           message: assistantResult.decision.reasoning || 'No personal data needed'
@@ -1266,7 +1099,7 @@ ipcMain.handle('send-message', async (_event, conversationId: string, message: s
       // Assistant errors are non-blocking
       const errorMessage = assistantError instanceof Error ? assistantError.message : String(assistantError);
       console.error('[Assistant] Processing error (continuing without assistant):', errorMessage);
-      mainWindow?.webContents.send('assistant-status', {
+      getMainWindow()?.webContents.send('assistant-status', {
         conversationId,
         status: 'error',
         message: 'Assistant unavailable'
@@ -1326,11 +1159,7 @@ ipcMain.handle('save-settings', async (_event, settings: Partial<SettingsSchema>
 
 // Open knowledge view in main window
 ipcMain.handle('open-knowledge', async () => {
-  if (mainWindow) {
-    mainWindow.show();
-    mainWindow.focus();
-    mainWindow.webContents.send('show-knowledge-view');
-  }
+  showKnowledgeView();
 });
 
 // Open external URL in default browser
@@ -1985,16 +1814,15 @@ ipcMain.handle('prompts-test-connection', async () => {
 
 // Select prompt (send to main window chat input)
 ipcMain.handle('prompts-select', async (_event, promptContent: string) => {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('prompt-selected', promptContent);
+  const win = getMainWindow();
+  if (win) {
+    win.webContents.send('prompt-selected', promptContent);
   }
 });
 
 // Close prompt selector window
 ipcMain.handle('prompts-close-selector', async () => {
-  if (promptSelectorWindow && !promptSelectorWindow.isDestroyed()) {
-    promptSelectorWindow.close();
-  }
+  closePromptSelectorWindow();
 });
 
 // ============================================================================
@@ -2639,9 +2467,10 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+    const win = getMainWindow();
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
     }
   });
 }
@@ -2653,7 +2482,7 @@ app.whenReady().then(() => {
   }
 
   createMainWindow();
-  createTray();
+  createTray({ spotlightKeybind: getSettings().spotlightKeybind });
 
   // Check for updates on startup (non-blocking)
   checkForUpdatesAndNotify();

@@ -1,5 +1,7 @@
 // Settings renderer
 
+import { isMac, formatKeybind, keyEventToAccelerator, buildAcceleratorFromModifiers } from './utils/index.js';
+
 const claude = (window as any).claude;
 
 interface Settings {
@@ -32,89 +34,6 @@ const vibevoiceCheckBtn = document.getElementById('vibevoice-check-btn') as HTML
 let isRecordingKeybind = false;
 let currentSettings: Settings | null = null;
 let pendingKeybind: string | null = null;
-
-// Detect if we're on macOS
-const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-
-// Format keybind for display
-function formatKeybind(keybind: string): string {
-  return keybind
-    .replace('CommandOrControl', isMac ? '\u2318' : 'Ctrl')
-    .replace('Command', '\u2318')
-    .replace('Control', 'Ctrl')
-    .replace('Shift', '\u21E7')
-    .replace('Alt', '\u2325')
-    .replace('Option', '\u2325')
-    .replace(/\+/g, ' + ');
-}
-
-// Build accelerator string from current modifier state
-function buildAcceleratorFromModifiers(e: KeyboardEvent): string {
-  const parts: string[] = [];
-
-  if (e.metaKey || e.ctrlKey) {
-    parts.push('CommandOrControl');
-  }
-  if (e.shiftKey) {
-    parts.push('Shift');
-  }
-  if (e.altKey) {
-    parts.push('Alt');
-  }
-
-  return parts.join('+');
-}
-
-// Convert key event to Electron accelerator format
-function keyEventToAccelerator(e: KeyboardEvent): { accelerator: string; isComplete: boolean } {
-  const parts: string[] = [];
-
-  if (e.metaKey || e.ctrlKey) {
-    parts.push('CommandOrControl');
-  }
-  if (e.shiftKey) {
-    parts.push('Shift');
-  }
-  if (e.altKey) {
-    parts.push('Alt');
-  }
-
-  // Get the key
-  let key = e.key;
-
-  // Check if this is a modifier-only press
-  const isModifierOnly = ['Meta', 'Control', 'Shift', 'Alt'].includes(key);
-
-  if (!isModifierOnly) {
-    // Normalize key names
-    if (key === ' ') key = 'Space';
-    if (key.length === 1) key = key.toUpperCase();
-
-    // Map special keys
-    const keyMap: Record<string, string> = {
-      'ArrowUp': 'Up',
-      'ArrowDown': 'Down',
-      'ArrowLeft': 'Left',
-      'ArrowRight': 'Right',
-      'Escape': 'Escape',
-      'Enter': 'Return',
-      'Backspace': 'Backspace',
-      'Delete': 'Delete',
-      'Tab': 'Tab',
-    };
-
-    if (keyMap[key]) {
-      key = keyMap[key];
-    }
-
-    parts.push(key);
-  }
-
-  return {
-    accelerator: parts.join('+'),
-    isComplete: !isModifierOnly && parts.length >= 2 // Need at least one modifier + one key
-  };
-}
 
 // Load settings
 async function loadSettings() {

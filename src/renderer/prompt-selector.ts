@@ -8,6 +8,8 @@
  * - Variable filling modal
  */
 
+import { escapeHtml } from './utils/index.js';
+
 // Type definitions (mirrors backend types)
 interface PromptVariable {
   name: string;
@@ -474,15 +476,6 @@ function cycleCategory(direction: number) {
 
   const newTab = tabs[newIndex] as HTMLElement;
   newTab.click();
-}
-
-/**
- * Escape HTML to prevent XSS.
- */
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 // ============================================

@@ -1,32 +1,82 @@
-import { parseMarkdown } from './markdown.js';
+/**
+ * Main Renderer Entry Point
+ *
+ * This is the primary renderer process for the main window.
+ * It handles:
+ * - View routing (login, home, chat, knowledge, prompts, settings)
+ * - Chat messaging and streaming
+ * - Conversation management
+ * - Integration with various features (knowledge, prompts, assistant, etc.)
+ *
+ * @module renderer/main
+ */
 
+import { parseMarkdown } from './markdown.js';
+import { escapeHtml, formatFileSize, formatDate, isMac, formatKeybind, keyEventToAccelerator } from './utils/index.js';
+import type {
+  Conversation,
+  ConversationData,
+  ContentBlock,
+  AttachmentPayload,
+  UploadedAttachmentPayload,
+  UploadedAttachment,
+  ThinkingData,
+  ThinkingStreamData,
+  ToolUseData,
+  ToolResultData,
+  StreamData,
+  CompleteData,
+  Step,
+  StreamingBlock,
+  KnowledgeItem,
+  KnowledgeSearchResult,
+  StoredPrompt,
+  TrackedPage
+} from './types.js';
+
+// Alias for backward compatibility with existing code that uses isMacPlatform
+const isMacPlatform = isMac;
+
+// ============================================================================
+// Global Window Interface Declaration
+// ============================================================================
 
 declare global {
   interface Window {
     claude: {
+      // Auth
       getAuthStatus: () => Promise<boolean>;
       login: () => Promise<{ success: boolean; error?: string }>;
       logout: () => Promise<void>;
+
+      // Conversations
       createConversation: (model?: string) => Promise<{ conversationId: string; parentMessageUuid: string; uuid?: string }>;
       getConversations: () => Promise<Conversation[]>;
       loadConversation: (convId: string) => Promise<ConversationData>;
       deleteConversation: (convId: string) => Promise<void>;
       renameConversation: (convId: string, name: string) => Promise<void>;
       starConversation: (convId: string, isStarred: boolean) => Promise<void>;
+
+      // Messaging
       sendMessage: (convId: string, message: string, parentUuid: string, attachments?: AttachmentPayload[]) => Promise<void>;
       stopResponse: (convId: string) => Promise<void>;
       generateTitle: (convId: string, messageContent: string) => Promise<void>;
       uploadAttachments: (files: Array<{ name: string; size: number; type: string; data: ArrayBuffer | Uint8Array | number[] }>) => Promise<UploadedAttachmentPayload[]>;
+
+      // Settings
       openSettings: () => Promise<void>;
       getSettings: () => Promise<{ spotlightKeybind?: string; spotlightPersistHistory?: boolean }>;
       saveSettings: (settings: { spotlightKeybind?: string; spotlightPersistHistory?: boolean }) => Promise<{ spotlightKeybind?: string; spotlightPersistHistory?: boolean }>;
+
+      // Stream Events
       onMessageThinking: (callback: (data: ThinkingData) => void) => void;
       onMessageThinkingStream: (callback: (data: ThinkingStreamData) => void) => void;
       onMessageToolUse: (callback: (data: ToolUseData) => void) => void;
       onMessageToolResult: (callback: (data: ToolResultData) => void) => void;
       onMessageStream: (callback: (data: StreamData) => void) => void;
       onMessageComplete: (callback: (data: CompleteData) => void) => void;
-      // Knowledge functions
+
+      // Knowledge
       openKnowledge: () => Promise<void>;
       knowledgeOpenFileDialog: () => Promise<string[]>;
       knowledgeGetSettings: () => Promise<{ qdrantUrl?: string; qdrantApiKey?: string; firecrawlApiKey?: string }>;
@@ -38,182 +88,36 @@ declare global {
       knowledgeList: () => Promise<KnowledgeItem[]>;
       knowledgeDelete: (ids: string[]) => Promise<void>;
       knowledgeDeleteBySource: (source: string) => Promise<{ success: boolean; deletedCount?: number; error?: string }>;
-      // Open external URL in browser (for URL knowledge cards)
       openExternalUrl: (url: string) => Promise<void>;
-      // Notion functions
+
+      // Notion
       notionGetSettings: () => Promise<{ notionToken?: string; lastSync?: string; syncOnStart?: boolean }>;
       notionSaveSettings: (settings: { notionToken?: string; syncOnStart?: boolean }) => Promise<void>;
       notionTestConnection: () => Promise<{ success: boolean; error?: string }>;
       notionSync: () => Promise<{ success: boolean; pagesCount?: number; chunksCount?: number; lastSync?: string; error?: string }>;
-      // Manual Notion Import functions
       notionImportPage: (urlOrId: string, includeSubpages: boolean) => Promise<{ success: boolean; pagesCount?: number; chunksCount?: number; pages?: unknown[]; error?: string }>;
       notionGetTrackedPages: () => Promise<unknown[]>;
       notionRemoveTrackedPage: (pageId: string) => Promise<{ success: boolean; title?: string; error?: string }>;
       notionCheckUpdates: () => Promise<{ success: boolean; updates: Array<{ id: string; title: string; lastEditedTime: string }>; error?: string }>;
       notionSyncTrackedPage: (pageId: string) => Promise<{ success: boolean; chunksCount?: number; page?: unknown; error?: string }>;
-      // RAG Agent functions
+
+      // RAG Agent
       ragGetSettings: () => Promise<{ enabled: boolean; ollamaUrl: string; model: string; maxQueries: number; maxContextChunks: number; minRelevanceScore: number }>;
       ragSaveSettings: (settings: { enabled?: boolean; ollamaUrl?: string; model?: string }) => Promise<void>;
       ragTestConnection: () => Promise<{ success: boolean; models?: string[]; error?: string }>;
       onRagStatus?: (callback: (data: { conversationId: string; status: string; message: string; detail?: { queriesGenerated?: number; chunksRetrieved?: number; processingTimeMs?: number } }) => void) => void;
-      // View switching
+
+      // View Events
       onShowKnowledgeView?: (callback: () => void) => void;
       onShowSettingsView?: (callback: () => void) => void;
-      // Prompt Base - listen for selected prompts from selector window
       onPromptSelected?: (callback: (content: string) => void) => void;
     };
   }
 }
 
-interface Conversation {
-  uuid: string;
-  name?: string;
-  summary?: string;
-  is_starred?: boolean;
-  updated_at: string;
-}
-
-interface ConversationData {
-  chat_messages?: Message[];
-}
-
-interface Message {
-  uuid?: string;
-  sender: string;
-  content?: ContentBlock[];
-  text?: string;
-}
-
-interface ContentBlock {
-  type: string;
-  text?: string;
-  thinking?: string;
-  summaries?: { summary: string }[];
-  name?: string;
-  message?: string;
-  display_content?: { text?: string };
-  input?: unknown;
-  content?: unknown[];
-  is_error?: boolean;
-  citations?: Citation[];
-}
-
-interface Citation {
-  url?: string;
-  title?: string;
-  start_index?: number;
-  end_index?: number;
-}
-
-interface AttachmentPayload {
-  document_id: string;
-  file_name: string;
-  file_size: number;
-  file_type: string;
-  file_url?: string;
-  extracted_content?: string;
-}
-
-interface UploadedAttachmentPayload extends AttachmentPayload {}
-
-interface UploadedAttachment extends AttachmentPayload {
-  id: string;
-  previewUrl?: string;
-}
-
-interface ThinkingData {
-  conversationId: string;
-  blockIndex: number;
-  isThinking: boolean;
-  thinkingText?: string;
-}
-
-interface ThinkingStreamData {
-  conversationId: string;
-  blockIndex: number;
-  thinking: string;
-  summary?: string;
-}
-
-interface ToolUseData {
-  conversationId: string;
-  blockIndex: number;
-  toolName: string;
-  message?: string;
-  input?: unknown;
-  isRunning: boolean;
-}
-
-interface ToolResultData {
-  conversationId: string;
-  blockIndex: number;
-  toolName: string;
-  result: unknown;
-  isError: boolean;
-}
-
-interface StreamData {
-  conversationId: string;
-  blockIndex?: number;
-  fullText: string;
-}
-
-interface CompleteData {
-  conversationId: string;
-  fullText: string;
-  steps: Step[];
-  messageUuid: string;
-}
-
-interface Step {
-  type: string;
-  text?: string;
-  thinkingText?: string;
-  thinkingSummary?: string;
-  summary?: string;
-  toolName?: string;
-  toolMessage?: string;
-  message?: string;
-  toolResult?: unknown;
-  toolInput?: unknown;
-  isError?: boolean;
-  isActive?: boolean;
-  index?: number;
-  citations?: Citation[];
-  ragMessage?: string; // RAG step message
-}
-
-interface StreamingBlock {
-  text?: string;
-  summary?: string;
-  isActive?: boolean;
-  name?: string;
-  message?: string;
-  input?: unknown;
-  result?: unknown;
-  isRunning?: boolean;
-  isError?: boolean;
-}
-
-// Knowledge types
-interface KnowledgeMetadata {
-  source: string;
-  filename: string;
-  type: 'txt' | 'md' | 'pdf' | 'url';
-  chunkIndex: number;
-  totalChunks: number;
-  dateAdded: string;
-}
-
-interface KnowledgeItem {
-  id: string;
-  content: string;
-  metadata: KnowledgeMetadata;
-}
-
-interface KnowledgeSearchResult extends KnowledgeItem {
-  score: number;
-}
+// ============================================================================
+// Application State
+// ============================================================================
 
 
 let conversationId: string | null = null;
@@ -266,18 +170,6 @@ function resetStreamingBlocks() {
 
 const $ = (id: string) => document.getElementById(id);
 const $$ = (selector: string) => document.querySelectorAll(selector);
-
-function escapeHtml(text: string): string {
-  return (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function formatFileSize(bytes: number): string {
-  if (!bytes) return '0 B';
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1);
-  const value = bytes / Math.pow(1024, i);
-  return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${sizes[i]}`;
-}
 
 function removeAttachment(id: string) {
   pendingAttachments = pendingAttachments.filter(a => a.id !== id);
@@ -384,17 +276,6 @@ function autoResize(el: HTMLTextAreaElement) {
 function autoResizeHome(el: HTMLTextAreaElement) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 200) + 'px';
-}
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days} days ago`;
-  return date.toLocaleDateString();
 }
 
 function scrollToBottom() {
@@ -518,45 +399,6 @@ let settingsInitialized = false;
 let isRecordingKeybind = false;
 let currentAppSettings: { spotlightKeybind: string; spotlightPersistHistory: boolean; spotlightSystemPrompt: string } | null = null;
 let pendingKeybind: string | null = null;
-
-// Detect if we're on macOS
-const isMacPlatform = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-
-// Format keybind for display
-function formatKeybind(keybind: string): string {
-  return keybind
-    .replace('CommandOrControl', isMacPlatform ? '\u2318' : 'Ctrl')
-    .replace('Command', '\u2318')
-    .replace('Control', 'Ctrl')
-    .replace('Shift', '\u21E7')
-    .replace('Alt', '\u2325')
-    .replace('Option', '\u2325')
-    .replace(/\+/g, ' + ');
-}
-
-// Convert key event to Electron accelerator format
-function keyEventToAccelerator(e: KeyboardEvent): { accelerator: string; isComplete: boolean } {
-  const parts: string[] = [];
-  if (e.metaKey || e.ctrlKey) parts.push('CommandOrControl');
-  if (e.shiftKey) parts.push('Shift');
-  if (e.altKey) parts.push('Alt');
-
-  let key = e.key;
-  const isModifierOnly = ['Meta', 'Control', 'Shift', 'Alt'].includes(key);
-
-  if (!isModifierOnly) {
-    if (key === ' ') key = 'Space';
-    if (key.length === 1) key = key.toUpperCase();
-    const keyMap: Record<string, string> = {
-      'ArrowUp': 'Up', 'ArrowDown': 'Down', 'ArrowLeft': 'Left', 'ArrowRight': 'Right',
-      'Escape': 'Escape', 'Enter': 'Return', 'Backspace': 'Backspace', 'Delete': 'Delete', 'Tab': 'Tab',
-    };
-    if (keyMap[key]) key = keyMap[key];
-    parts.push(key);
-  }
-
-  return { accelerator: parts.join('+'), isComplete: !isModifierOnly && parts.length >= 2 };
-}
 
 // Load settings values into UI
 async function loadSettingsValues() {
@@ -1602,16 +1444,6 @@ async function migrateKnowledgeToCloud() {
 // Manual Notion Page Import Functions
 // ============================================================================
 
-// Tracked page interface (mirrors backend type)
-interface TrackedPage {
-  id: string;
-  url: string;
-  title: string;
-  lastSynced: string;
-  lastEditedTime: string;
-  includeSubpages: boolean;
-}
-
 // Track which pages have updates available
 let pagesWithUpdates: Set<string> = new Set();
 
@@ -2260,18 +2092,6 @@ function initKnowledgeUI() {
 // ============================================================================
 // Prompts Management Functions
 // ============================================================================
-
-interface StoredPrompt {
-  id: string;
-  name: string;
-  category: string;
-  content: string;
-  variables: Array<{ name: string; defaultValue: string; description: string }>;
-  is_favorite: boolean;
-  usage_count: number;
-  created_at: string;
-  updated_at: string;
-}
 
 // Load and render prompts list
 async function loadPromptsList() {

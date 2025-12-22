@@ -1,4 +1,5 @@
 import { parseMarkdown } from './markdown.js';
+import { escapeHtml } from './utils/index.js';
 
 // Use any for window.claude - it's typed in preload but we don't need strict types here
 const claude = (window as any).claude;
@@ -56,12 +57,6 @@ const toolLabels: Record<string, string> = {
 };
 
 // Utility functions
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text || '';
-  return div.innerHTML;
-}
-
 function updateWindowSize() {
   if (!container) return;
   const containerHeight = container.offsetHeight;
